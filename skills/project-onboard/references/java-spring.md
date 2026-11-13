@@ -3,7 +3,7 @@
 ## 探查顺序
 
 1. 找 `pom.xml` 或 Gradle 构建配置、模块声明、依赖管理、JDK 配置和 CI。确认启动模块、工作目录和测试配置。
-2. 看一个具有代表性的接口、消息消费者或定时任务及其测试。定位输入校验、鉴权、业务规则、异常处理和数据访问。记录真实类、配置或测试路径。
+2. 看一个具有代表性的入口及其测试，例如应用启动、HTTP、CLI、公开库、消息或定时任务。定位适用的业务规则和验证边界，记录真实类、配置或测试路径。
 3. 根据任务核对事务边界、租户权限、分页排序、批量操作、迁移工具、外部调用和异步重试。项目采用哪种框架或分层，就按实际实现记录。
 4. 从项目配置核对构建命令会执行的测试和检查。确认数据库、容器、测试 profile、私有依赖和本地服务等前置条件。
 
@@ -28,7 +28,9 @@
 
 从零项目使用环境提供的工具。Maven 可从 `mvn test`、`mvn verify` 开始，Gradle 可从 `gradle test`、`gradle check` 开始。已有项目优先用原来的入口，包括它已经配置的 Wrapper。多模块项目核对工作目录、模块参数和任务依赖。实际使用前确认构建配置绑定了对应测试与检查。
 
-Maven 先核对 `mvn -version` 中的 Java 版本。Shell 的 `java -version` 和 IDE 的项目 JDK 可能与 Maven 不同。需要切换时只在本次验证进程设置 `JAVA_HOME` 与 `PATH`，再确认 Maven 实际使用了目标版本。可用 [Maven 预检脚本](../scripts/maven_preflight.py)完成检查，用 `--verify` 跑完整构建，或在 `--` 后传入项目的 Maven 参数。
+Maven 先核对 `mvn -version` 中的 Java 版本。Shell 的 `java -version` 和 IDE 的项目 JDK 可能与 Maven 不同。需要切换时只在本次验证进程设置 `JAVA_HOME` 与 `PATH`，再确认 Maven 实际使用了目标版本。可用 [Maven 预检脚本](../scripts/maven_preflight.py)完成检查，按需用 `--java-home` 指定已安装的 JDK，再用 `--verify` 跑完整构建，或在 `--` 后传入项目的 Maven 参数。
+
+Gradle 从项目实际入口运行 `--version`，核对启动及构建进程使用的 JDK，并从构建文件确认 Java toolchain 和实际测试任务。跨子项目时记录根目录、模块路径和任务，例如根目录下运行 `gradlew.bat :backend:check`。已有 Wrapper 时复用。新建 Spring 项目交付使用环境提供的 `mvn` 或 `gradle`，采用生成器时在交付前检查 Wrapper 文件和目录。
 
 项目入口记录 JDK、构建工具、执行目录和经过验证的命令。另记测试报告、启动探测结果和缺失的环境。CI 调用项目构建入口，所需 JDK 和构建工具版本由 CI 环境提供。
 

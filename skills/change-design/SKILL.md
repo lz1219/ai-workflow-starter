@@ -1,6 +1,6 @@
 ---
 name: change-design
-description: Turn a concrete feature request into a reviewable, versioned design in the target repository. Use when the user describes a new feature, asks for requirements or technical design, reviews a design, or hands off an approved design for implementation. Covers API contracts, database design, Mermaid sequence and ER diagrams, decisions, and acceptance evidence.
+description: Turn a feature or behavior change into a reviewable design, implementation tasks, and acceptance evidence. Use for requirements, technical design, design review, or implementation handoff across applications, libraries, CLI tools, and data jobs.
 ---
 
 # 需求与技术设计
@@ -9,8 +9,8 @@ description: Turn a concrete feature request into a reviewable, versioned design
 
 ## 1. 读项目和明确需求
 
-1. 从 `AGENTS.md` 找项目概览、开发规范和需求索引。按工单号、业务关键词和同义名称搜索需求标题与正文，并交叉核对接口、表名、相关代码和已有链接。结合 PR、部署记录或已发布契约判断交付状态。能唯一匹配时直接使用对应设计，只有多个合理候选会影响范围时才请用户确认。状态无法证实时标记待确认。
-2. 收到一大段需求时，提取原始目标、角色、规则和限制，检查哪些已覆盖、哪些是对已有需求的变更、哪些是新需求。按可独立交付和验收的业务结果拆解。共同构成一个结果的页面、接口、数据表和测试写在同一需求的实施计划里。给出拆解结果、顺序、依赖和需要确认的业务边界，再为范围清楚的需求起草设计。
+1. 从 `AGENTS.md` 找项目概览、开发规范和需求索引。按工单号、业务关键词和同义名称搜索需求标题与正文，并交叉核对调用入口、契约、相关代码和已有链接。结合 PR、部署记录或已发布契约判断交付状态。能唯一匹配时直接使用对应设计，只有多个合理候选会影响范围时才请用户确认。状态无法证实时标记待确认。
+2. 收到一大段需求时，提取原始目标、角色、规则和限制，检查哪些已覆盖、哪些是对已有需求的变更、哪些是新需求。按可独立交付和验收的业务结果拆解，记录顺序、依赖和需确认的业务边界。同一结果涉及多个模块时共用一份设计。跨仓库时沿用现有主责或共享文档的位置，各仓库的任务或 PR 引用同一主设计和验收编号。
 3. 把用户明确给出的规则写进「需求与验收」，技术方案写进设计部分，提议与已确认事实分别标明。对会改变业务语义、接口承诺、数据含义或上线风险的未决项，列出建议和影响。
 
 ## 需求关系和索引
@@ -22,12 +22,9 @@ description: Turn a concrete feature request into a reviewable, versioned design
 ## 2. 交付设计草案
 
 - 用业务场景、失败场景、边界条件和可验证的验收项定义交付范围。每条验收项保留稳定编号，例如 `AC-1`。
-- 用 Mermaid 时序图表达关键调用，覆盖重要的失败或分支。参与者与实际代码或计划新增的模块对应。涉及业务状态时按需补状态图。
-- 涉及业务数据或持久化时，用 Mermaid ER 图标明关系和基数，同时写清表字段、类型、可空性、默认值、主外键或逻辑关联、唯一约束、索引和查询用途。数据结构有变化时说明 Flyway 版本、兼容或回填、验证与恢复。ER 图与表定义使用一致的表名和键。
-- 涉及接口时，写清方法、路径、请求字段和校验、返回字段、HTTP 状态、错误、分页或幂等。给出关键请求与响应示例，关联验收项。已有 OpenAPI 契约时链接并写清变更。
-- 无 HTTP 接口、数据关系或迁移时，在对应小节简短说明适用范围，例如「读取现有表，无结构变化」。图和字段按项目实际设计填写。
+- 确认受影响的实际入口和模块。从调用方可观察的行为写契约，按改动选择 [技术章节参考](references/design-sections.md) 中适用的内容，例如界面、HTTP、命令行、公共库、消息、数据或持久化。有多个模块时标出各自责任、共享契约和联调场景。
 - 用 [任务看板模板](assets/tasks.md) 在设计同目录建 `tasks.md`。每项写完成后可独立验证的结果，按需把接口、数据和测试放在同一个任务里。编号用 `T1`、`T2`，与 `AC-*` 关联。后续按顺序追加任务，保留已完成记录。
-- 自审接口、时序、ER、字段类型和验收条件是否一致。逐条确认本次验收项有对应任务或验证安排，按需记录手工验证、可复用的历史证据或已确认的延期范围。采用本模板时，运行看板脚本的 `--review <需求目录名>` 辅助查找遗漏，再判断安排是否覆盖实际场景。交付评审范围、设计与任务看板、需决定的问题和主要取舍，刷新需求总看板。
+- 核对契约、实现方案和验收条件是否一致。逐条确认本次验收项有任务或验证安排。按实际工作目录引用项目开发规范的验证入口，涉及模块协作时增加跨模块验证。采用本模板时，可用看板脚本的 `--review <需求目录名>` 查找遗漏。交付评审范围、设计与任务看板、需决定的问题和主要取舍，刷新需求总看板。
 
 ## 3. 评审、实现与验收
 
@@ -45,4 +42,4 @@ description: Turn a concrete feature request into a reviewable, versioned design
 | 新增可独立维护的业务能力 | 建立新的具名需求目录，按实际关系引用已有能力。 | 单独设计、评审和验收。 |
 | 修复实现偏差，目标仍是已确认的行为 | 在 Issue 或 PR 链接原验收项，记录复现和验证。若重新定义预期行为，按需求变更处理。 | 补回归测试并验证原承诺。 |
 
-验收项保留稳定编号。规则被替换时保留原编号并标明后继验收项，新增验收用新编号。已在目标环境执行的 Flyway 迁移保持原文件，通过下一版本演进。独立维护的 OpenAPI、原型或其他附件可放在需求目录内，由 `design.md` 链接。发布时同步项目已有的长期规格或接口契约。
+验收项保留稳定编号。规则被替换时保留原编号并标明后继验收项，新增验收用新编号。独立维护的接口契约、原型或其他附件由 `design.md` 链接。发布时同步项目已有的长期规格或契约。

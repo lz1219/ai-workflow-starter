@@ -1,6 +1,6 @@
-# Java / Spring AI 项目接入
+# AI 项目接入与需求设计
 
-`project-onboard` 帮助开发者从零创建 Java / Spring 项目，或探查已有项目并整理开发规范。接入后，团队从仓库里的 `AGENTS.md` 找到开发文档和验证命令，继续使用项目自己的构建和 CI。
+`project-onboard` 接入已有的 Java、Python、Node 或混合技术栈项目，也可以从零创建 Spring 工程。团队通过 `AGENTS.md` 找到项目开发规范和各模块的实际验证命令。`change-design` 用一套需求设计和验收流程支持 Web、CLI、公共库、后台任务等项目。
 
 ## 使用
 
@@ -19,10 +19,10 @@
 
 ## 两条路径
 
-- **创建项目**：确定技术选择，按需借鉴用户提供的参考项目，生成构建配置、应用入口和基础测试，使用环境提供的 Maven 或 Gradle 验证。新项目无需 Wrapper。
-- **接入已有项目**：读现有文档、配置、构建和 CI，沿一条真实业务链核对约定，记录证据和验证结果。已有文档原地引用，缺少项目开发规范时默认使用 `docs/development.md`。
+- **创建 Spring 项目**：确定技术选择，按需借鉴用户提供的参考项目，生成构建配置、应用入口和基础测试，使用环境提供的 Maven 或 Gradle 验证。新项目无需 Wrapper。
+- **接入已有项目**：根据构建清单、锁文件和 CI 按模块识别运行时、调用入口和验证方式，沿一条实际链路核对约定。缺少项目开发规范时默认使用 `docs/development.md`，各模块有独立约定时在根 `AGENTS.md` 链接。
 
-基础开发规范与 Java / Spring 参考随接入 Skill 分发。接入方案见 [第一版设计](DESIGN.md)。
+基础开发规范和 Java / Spring、Python、Node 的探查参考随接入 Skill 分发。接入方案见 [设计说明](DESIGN.md)。
 
 Maven 项目可从 Skill 目录运行 `python scripts/maven_preflight.py --project <项目根目录> --java-version 17`，核对实际 JDK。可加 `--verify` 运行完整构建，或在 `--` 后传入项目自己的 Maven 参数。例如 `-- -B -Dtest=ExampleTest test` 可在选定的 JDK 下运行指定测试。
 
@@ -30,7 +30,7 @@ Maven 项目可从 Skill 目录运行 `python scripts/maven_preflight.py --proje
 
 把 [change-design](skills/change-design/) 按上表放入同一技能目录，在目标项目里直接描述需求，例如「给看板增加按部门筛选和导出，先出设计」。
 
-AI 从 `AGENTS.md` 进入，核对现有代码、接口和数据，再用 [设计模板](skills/change-design/assets/design.md) 创建或更新一份设计。项目已有约定就沿用，默认建立 `docs/design/Req-YYYYMMDD-需求名称/design.md`。已有工单编号记录在文档顶部。文档保留业务规则、验收、时序图、ER 图、表结构、接口、待确认问题与评审决定。
+AI 从 `AGENTS.md` 进入，核对现有行为、调用入口和项目规范，再用 [设计模板](skills/change-design/assets/design.md) 创建或更新设计。默认位置为 `docs/design/Req-YYYYMMDD-需求名称/design.md`。设计记录业务规则、验收、技术方案和评审决定，按需补充 [技术章节](skills/change-design/references/design-sections.md)。前后端或多个仓库共同交付同一能力时，共用主设计和验收编号，各模块沿用自己的验证命令。
 
 评审时可以直接说「把导出范围改成当前筛选结果」，AI 更新同一份设计并指出受影响的验收项。决定实施时说「按这份设计实现」。换会话时可以描述功能，AI 查找已有设计，从已确认的方案、验收项和关联任务继续。实现后把测试结果写回，PR 引用设计。
 
@@ -46,6 +46,10 @@ python .agents/skills/change-design/scripts/requirements.py --check
 ```
 
 评审指定需求时，可运行 `python .agents/skills/change-design/scripts/requirements.py --review "Req-YYYYMMDD-需求名称"`。它检查「需求与验收」中的每条编号是否有关联任务或书面验证安排。覆盖缺口只输出提示，验收结果由实际验证和评审确认。
+
+## 更新工作流
+
+在目标项目的 `AGENTS.md` 按 [同步参考](skills/project-onboard/references/workflow-update.md) 登记上游、启用的 Skill、源提交和验证命令。以后可在目标项目里说「更新工作流」，让 AI 比较上游与本地、同步已登记的目录并验证。目标项目继续维护自己的开发规范、构建配置和需求记录。
 
 ## 验证接入包
 
