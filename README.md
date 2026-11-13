@@ -45,6 +45,8 @@ python .agents/skills/change-design/scripts/requirements.py --write
 python .agents/skills/change-design/scripts/requirements.py --check
 ```
 
+评审指定需求时，可运行 `python .agents/skills/change-design/scripts/requirements.py --review "Req-YYYYMMDD-需求名称"`。它检查「需求与验收」中的每条编号是否有关联任务或书面验证安排。覆盖缺口只输出提示，验收结果由实际验证和评审确认。
+
 ## 验证接入包
 
-在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、阻塞记录、路径校验，以及 Maven 参数和 JDK 环境的传递。运行这些测试只需要 Python。
+在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、阻塞记录、验收覆盖提示、路径校验，以及 Maven 参数和 JDK 环境的传递。运行这些测试只需要 Python。

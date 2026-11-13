@@ -33,6 +33,57 @@ class RequirementsTests(unittest.TestCase):
         self.assertIn("项目目录不存在", result.stderr)
         self.assertFalse(missing.exists())
 
+    def test_review_reports_uncovered_and_cancelled_criteria_without_changing_board(self):
+        requirement = self.design_root / "Req-20261113-数据导出"
+        requirement.mkdir(parents=True)
+        design_template = SCRIPT.parent.parent / "assets/design.md"
+        design = design_template.read_text(encoding="utf-8")
+        (requirement / "design.md").write_text(
+            design.replace(
+                "| AC-1 | 填写核心场景 | 填写可验证结果 |",
+                "| AC-1 | 正常导出 | 下载文件 |\n"
+                "| AC-2 | 跨部门 | HTTP 403 |\n"
+                "| AC-3 | 正式数据 | 记录对账差异 |\n"
+                "| AC-4 | 空结果 | CSV 仅有表头 |\n"
+                "| AC-5 | 无权访问 | HTTP 403 |\n"
+                "| AC-6 | 重复请求 | 响应一致 |",
+            ).replace(
+                "| AC-1 | 测试、命令或手工步骤 | 实现后填写 |",
+                "| AC-3 | 收到脱敏台账后按部门对账（已确认延期） | — |\n"
+                "| AC-4 | 手工导出空结果，核对文件只含表头 | — |\n"
+                "| AC-5 | 测试、命令或手工步骤 | 实现后填写 |\n"
+                "| AC-6 | — | 上次发布的重试回归测试，契约一致 |\n\n"
+                "```markdown\n"
+                "| 验收项 | 验证方式 |\n"
+                "|---|---|\n"
+                "| AC-5 | 这里只是示例 |\n"
+                "```",
+            ),
+            encoding="utf-8",
+        )
+        tasks_template = SCRIPT.parent.parent / "assets/tasks.md"
+        (requirement / "tasks.md").write_text(
+            tasks_template.read_text(encoding="utf-8").replace(
+                "| T1 | 填写要交付的结果 | 待办 | AC-1 | — | — |",
+                "| T1 | 正常导出下载文件 | 待办 | AC-1 | — | — |\n"
+                "| T2 | 跨部门请求返回 403 | 取消 | AC-2 | — | — |",
+            ),
+            encoding="utf-8",
+        )
+        generated = self.run_board(self.project, "--write")
+        self.assertEqual(generated.returncode, 0, generated.stderr)
+        before = self.board.read_bytes()
+
+        reviewed = self.run_board(self.project, "--review", requirement.name)
+        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
+        self.assertIn("AC-2 缺少关联任务或验证安排", reviewed.stderr)
+        self.assertIn("AC-5 缺少关联任务或验证安排", reviewed.stderr)
+        for criterion in ("AC-1", "AC-3", "AC-4", "AC-6"):
+            self.assertNotIn(criterion, reviewed.stderr)
+        self.assertEqual(self.board.read_bytes(), before)
+        checked = self.run_board(self.project, "--check")
+        self.assertEqual(checked.returncode, 0, checked.stderr)
+
     def test_blocker_appears_after_refresh(self):
         requirement = self.design_root / "Req-20261113-数据导出"
         requirement.mkdir(parents=True)

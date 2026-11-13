@@ -14,9 +14,12 @@ RELATIONS = ("depends_on", "follows", "related")
 TASK_HEADER = "| 编号 | 计划任务 | 状态 | 验收项 | 实际完成内容 | 证据或交接 |"
 TASK_STATES = {"待办", "进行中", "阻塞", "完成", "取消"}
 EMPTY_CELLS = {"", "—", "-"}
+ACCEPTANCE_ROW = re.compile(r"^\|\s*(AC-\d+)\s*\|")
+ACCEPTANCE_SECTION = re.compile(r"^##\s+(?:\d+\.\s*)?需求与验收\s*$")
+VERIFICATION_PLACEHOLDERS = EMPTY_CELLS | {"测试、命令或手工步骤", "实现后填写"}
 
 
-def read_design(path):
+def read_design(path, *, review=False):
     lines = path.read_text(encoding="utf-8-sig").splitlines()
     if not lines or lines[0] != "---" or "---" not in lines[1:]:
         raise ValueError(f"{path}: 缺少需求元数据")
@@ -38,11 +41,10 @@ def read_design(path):
             raise ValueError(f"{path}: {field} 应为目录名列表")
         if len(references) != len(set(references)):
             raise ValueError(f"{path}: {field} 含重复引用")
-    acceptance_ids = {
-        match[1] for line in lines
-        if (match := re.match(r"^\|\s*(AC-\d+)\s*\|", line))
-    }
+    acceptance_ids = {match[1] for line in lines if (match := ACCEPTANCE_ROW.match(line))}
     metadata["tasks"] = read_tasks(path.with_name("tasks.md"), acceptance_ids)
+    if review:
+        metadata["coverage_warnings"] = review_coverage(lines, metadata["tasks"])
     return metadata
 
 
@@ -81,10 +83,56 @@ def read_tasks(path, acceptance_ids):
             "id": task_id,
             "plan": plan,
             "status": status,
+            "acceptance": references,
             "result": result,
             "evidence": evidence,
         })
     return tasks
+
+
+def review_coverage(lines, tasks):
+    criteria = set()
+    verification = set()
+    section = ""
+    in_verification_table = False
+    fence = None
+    for line in lines:
+        line = line.strip()
+        if fence:
+            if len(line) >= len(fence) and not line.strip(fence[0]):
+                fence = None
+            continue
+        marker = re.match(r"^(`{3,}|~{3,})", line)
+        if marker:
+            fence = marker[1]
+            in_verification_table = False
+            continue
+        if re.match(r"^##\s", line):
+            section = line
+            in_verification_table = False
+        row = ACCEPTANCE_ROW.match(line)
+        if ACCEPTANCE_SECTION.fullmatch(section):
+            if row:
+                criteria.add(row[1])
+            continue
+        if re.match(r"^\|\s*验收项\s*\|", line):
+            in_verification_table = "验证" in section or "验收" in section
+        elif not line.startswith("|"):
+            in_verification_table = False
+        elif in_verification_table and row:
+            cells = re.split(r"(?<!\\)\|", line[row.end():])
+            if any(cell.strip() not in VERIFICATION_PLACEHOLDERS for cell in cells):
+                verification.add(row[1])
+
+    if not criteria:
+        return ["未识别「需求与验收」中的 AC-* 条目，请核对设计范围和表格。"]
+    for task in tasks or []:
+        if task["status"] != "取消":
+            verification.update(task["acceptance"])
+    return [
+        f"{criterion} 缺少关联任务或验证安排，请补充任务、手工验证、历史证据或延期安排。"
+        for criterion in sorted(criteria - verification, key=lambda value: (int(value[3:]), value))
+    ]
 
 
 def load_designs(root):
@@ -173,6 +221,7 @@ def main():
     mode = parser.add_mutually_exclusive_group()
     mode.add_argument("--write", action="store_true", help="更新 docs/design/README.md")
     mode.add_argument("--check", action="store_true", help="检查需求关系、任务记录和看板时效")
+    mode.add_argument("--review", metavar="需求目录名", help="只读检查指定需求的验收覆盖，缺口输出提示")
     args = parser.parse_args()
     project = args.project.resolve()
     root = project / "docs" / "design"
@@ -180,6 +229,19 @@ def main():
     try:
         if not project.is_dir():
             raise ValueError(f"项目目录不存在或不是目录：{project}")
+        if args.review is not None:
+            design = next(
+                (path for path in root.glob("*/design.md") if path.parent.name == args.review),
+                None,
+            )
+            if design is None:
+                raise ValueError(f"未找到需求目录：{args.review}")
+            warnings = read_design(design, review=True)["coverage_warnings"]
+            for warning in warnings:
+                print(f"{args.review}: {warning}", file=sys.stderr)
+            if not warnings:
+                print(f"{args.review}: 验收项均有关联任务或验证记录。")
+            return 0
         content = render_board(load_designs(root), (root.parent / "project.md").is_file())
         if args.write:
             root.mkdir(parents=True, exist_ok=True)
