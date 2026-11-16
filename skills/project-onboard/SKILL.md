@@ -12,6 +12,7 @@ description: Onboard existing projects by identifying module entry points, tooli
 - **创建项目**：区分目标目录和参考项目。目标目录已有业务工程时核对目标与范围。
 - **接入已有项目**：先只读探查，再提交草案，按已确认的范围更新项目文档。
 - **更新已安装工作流**：按 [同步参考](references/workflow-update.md) 使用登记清单和更新工具，先预览，再在无冲突时同步和验证。
+- **安装或检查工作流**：按 [安装与检查](references/workflow-update.md) 使用 `--install` 一并安装和登记版本，使用 `--doctor` 离线检查接入状态。项目文档仍根据实际探查结果维护。
 - 用户只要求设计或探查时，交付草案或报告。已明确要求创建或落地且范围清楚时，继续执行。只询问会实质影响结果的未决问题。
 
 ## 创建项目

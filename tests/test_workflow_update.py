@@ -273,6 +273,89 @@ class WorkflowUpdateTests(unittest.TestCase):
         self.assertIn("executable modes", result.stderr)
         self.assertEqual(self.snapshot(), before)
 
+    def test_install_preview_and_apply_register_exact_git_bytes_and_keep_project_rules(self):
+        (self.project / updater.MANIFEST).unlink()
+        for path in self.installed.iterdir():
+            path.unlink()
+        (self.project / "AGENTS.md").write_bytes(b"Existing team rules.\n")
+        before = self.snapshot()
+        checks = self.root / "checks.json"
+        preview = self.run_update("--install", "example", "--checks-file", str(checks), "--dry-run")
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        self.assertEqual(self.snapshot(), before)
+        installed = self.run_update("--install", "example", "--checks-file", str(checks))
+        self.assertEqual(installed.returncode, 0, installed.stderr)
+        self.assertEqual(self.manifest()["skills"]["example"]["revision"], self.old)
+        self.assertTrue((self.project / "AGENTS.md").read_bytes().startswith(b"Existing team rules.\n"))
+        self.assertEqual((self.installed / "SKILL.md").read_bytes(), (self.upstream / "SKILL.md").read_bytes())
+        after = self.snapshot()
+        repeated = self.run_update("--install", "example")
+        self.assertEqual(repeated.returncode, 0, repeated.stderr)
+        self.assertEqual(self.snapshot(), after)
+        inspected = self.run_update("--doctor")
+        self.assertEqual(inspected.returncode, 0, inspected.stderr)
+        self.assertFalse(json.loads(inspected.stdout)["checks_executed"])
+
+    def test_install_failure_restores_project_instructions_and_missing_manifest(self):
+        (self.project / updater.MANIFEST).unlink()
+        for path in self.installed.iterdir():
+            path.unlink()
+        (self.project / "AGENTS.md").write_bytes(b"keep these rules\n")
+        checks = self.root / "bad-checks.json"
+        checks.write_text(json.dumps([{"cwd": ".", "argv": ["{python}", "-c", "raise SystemExit(9)"]}]), encoding="utf-8")
+        before = self.snapshot()
+        result = self.run_update("--install", "example", "--checks-file", str(checks))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_install_does_not_adopt_unknown_customized_files(self):
+        (self.project / updater.MANIFEST).unlink()
+        (self.installed / "SKILL.md").write_bytes(b"keep customization\n")
+        before = self.snapshot()
+        result = self.run_update("--install", "example", "--checks-file", str(self.root / "checks.json"))
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_doctor_distinguishes_customizations_missing_files_and_interruption(self):
+        (self.installed / "custom.md").write_bytes(b"customized\n")
+        before = self.snapshot()
+        inspected = self.run_update("--doctor")
+        self.assertEqual(inspected.returncode, 0)
+        report = json.loads(inspected.stdout)
+        self.assertEqual(report["skills"]["example"]["modified"], ["custom.md"])
+        self.assertEqual(self.snapshot(), before)
+        (self.installed / "old.md").unlink()
+        (self.project / updater.JOURNAL).write_bytes(b"{}")
+        before = self.snapshot()
+        inspected = self.run_update("--doctor")
+        self.assertEqual(inspected.returncode, 1)
+        report = json.loads(inspected.stdout)
+        self.assertEqual(report["skills"]["example"]["missing"], ["old.md"])
+        self.assertTrue(any("Unfinished" in error for error in report["errors"]))
+        self.assertEqual(self.snapshot(), before)
+
+    def test_claude_install_creates_discoverable_entry_without_overwriting_rules(self):
+        (self.project / updater.MANIFEST).unlink()
+        (self.project / "CLAUDE.md").write_bytes(b"Existing Claude rules.\n")
+        result = self.run_update("--install", "example", "--tool", "claude", "--checks-file", str(self.root / "checks.json"))
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.manifest()["skills"]["example"]["target"], ".claude/skills/example")
+        self.assertTrue((self.project / "CLAUDE.md").read_bytes().startswith(b"Existing Claude rules.\n"))
+        self.assertIn(b"@AGENTS.md", (self.project / "CLAUDE.md").read_bytes())
+
+    def test_doctor_resolves_relative_commands_in_the_check_working_directory(self):
+        module = self.project / "module"
+        module.mkdir()
+        command = module / ("check.cmd" if os.name == "nt" else "check.sh")
+        command.write_text("@exit /b 0\n" if os.name == "nt" else "#!/bin/sh\nexit 0\n", encoding="utf-8")
+        command.chmod(0o755)
+        manifest = self.manifest()
+        manifest["checks"] = [{"cwd": "module", "argv": ["./" + command.name]}]
+        (self.project / updater.MANIFEST).write_bytes(updater.json_bytes(manifest))
+        inspected = self.run_update("--doctor")
+        self.assertEqual(inspected.returncode, 0, inspected.stderr + inspected.stdout)
+        updater.run_checks(self.project, manifest["checks"])
+
 
 if __name__ == "__main__":
     unittest.main()

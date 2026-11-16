@@ -1,0 +1,109 @@
+import json
+import os
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+
+SCRIPT = Path(__file__).resolve().parents[1] / "evals/run.py"
+
+
+class EvalTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.root = Path(temp.name)
+
+    def call(self, *args):
+        return subprocess.run([sys.executable, "-B", str(SCRIPT), *map(str, args)], capture_output=True,
+                              text=True, encoding="utf-8", env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+
+    def prepare(self, case="python-cli", variant="baseline"):
+        trial = self.root / (case + "-" + variant)
+        result = self.call("prepare", "--case", case, "--variant", variant, "--trial", trial)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        return trial
+
+    def fix(self, trial):
+        path = trial / "workspace/importer.py"
+        path.write_text(path.read_text(encoding="utf-8").replace(
+            '    Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")',
+            '    if not args.dry_run:\n        Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")'), encoding="utf-8")
+
+    def test_holdout_checks_reject_original_bug_and_accept_real_fix(self):
+        trial = self.prepare()
+        bad = self.call("grade", "--trial", trial)
+        self.assertEqual(bad.returncode, 1, bad.stderr)
+        result = json.loads((trial / "grade.json").read_text(encoding="utf-8"))
+        self.assertFalse(result["checks"]["dry_run_preserves_existing_file"])
+        self.fix(trial)
+        good = self.call("grade", "--trial", trial)
+        self.assertEqual(good.returncode, 0, good.stderr)
+
+    def test_resume_grader_detects_loss_of_previously_completed_behavior(self):
+        trial = self.prepare("resume-cli")
+        self.fix(trial)
+        self.assertEqual(self.call("grade", "--trial", trial).returncode, 0)
+        path = trial / "workspace/importer.py"
+        path.write_text(path.read_text(encoding="utf-8").replace('    accepted = list({row["name"]: row for row in accepted}.values())\n', ''), encoding="utf-8")
+        self.assertEqual(self.call("grade", "--trial", trial).returncode, 1)
+
+    def test_agent_success_claim_is_not_a_passing_outcome(self):
+        trial = self.prepare()
+        runner = self.root / "runner.json"
+        runner.write_text(json.dumps({"label": "fake-success", "argv": [sys.executable, "-c", "print('All tasks completed successfully')"]}), encoding="utf-8")
+        result = self.call("run", "--trial", trial, "--runner", runner)
+        self.assertEqual(result.returncode, 1)
+        execution = json.loads((trial / "execution.json").read_text(encoding="utf-8"))
+        self.assertEqual(execution["status"], "completed")
+        self.assertIsNone(execution["usage"])
+        self.assertEqual(json.loads((trial / "grade.json").read_text(encoding="utf-8"))["status"], "failed")
+        self.assertNotEqual(self.call("run", "--trial", trial, "--runner", runner).returncode, 0)
+
+    def test_baseline_and_candidate_share_fixture_and_prompt(self):
+        baseline, candidate = self.prepare(), self.prepare(variant="candidate")
+        left = json.loads((baseline / "trial.json").read_text(encoding="utf-8"))
+        right = json.loads((candidate / "trial.json").read_text(encoding="utf-8"))
+        self.assertEqual(left["fixture"], right["fixture"])
+        self.assertEqual(left["prompt"], right["prompt"])
+        self.assertIsNone(left["workflow"])
+        self.assertTrue(right["workflow"])
+        self.assertFalse((baseline / "workspace/.agents").exists())
+        self.assertTrue((candidate / "workspace/.agents/skills/change-design/SKILL.md").is_file())
+        self.assertNotEqual(self.call("prepare", "--case", "python-cli", "--variant", "baseline", "--trial", baseline).returncode, 0)
+
+    def test_runner_failure_is_recorded_separately_from_acceptance(self):
+        trial = self.prepare()
+        runner = self.root / "runner.json"
+        runner.write_text(json.dumps({"argv": [sys.executable, "-c", "raise SystemExit(9)"]}), encoding="utf-8")
+        result = self.call("run", "--trial", trial, "--runner", runner)
+        self.assertEqual(result.returncode, 2)
+        self.assertFalse((trial / "grade.json").exists())
+        self.assertEqual(json.loads((trial / "execution.json").read_text(encoding="utf-8"))["status"], "execution_error")
+
+    def test_deleting_target_is_a_task_failure_not_an_environment_error(self):
+        trial = self.prepare()
+        path = trial / "workspace/importer.py"
+        path.write_text(path.read_text(encoding="utf-8").replace(
+            '    Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")',
+            '    Path(args.target).unlink(missing_ok=True)'), encoding="utf-8")
+        result = self.call("grade", "--trial", trial)
+        self.assertEqual(result.returncode, 1)
+        self.assertEqual(json.loads((trial / "grade.json").read_text(encoding="utf-8"))["status"], "failed")
+
+    def test_explicit_host_policy_rejection_is_not_a_task_quality_result(self):
+        trial = self.prepare()
+        runner = self.root / "runner.json"
+        runner.write_text(json.dumps({"argv": [sys.executable, "-c", "import sys; print('rejected: blocked by policy',file=sys.stderr)"]}), encoding="utf-8")
+        self.assertEqual(self.call("run", "--trial", trial, "--runner", runner).returncode, 2)
+        self.assertFalse((trial / "grade.json").exists())
+
+    def test_runner_timeout_does_not_produce_an_acceptance_result(self):
+        trial = self.prepare()
+        runner = self.root / "runner.json"
+        runner.write_text(json.dumps({"argv": [sys.executable, "-c", "import time; time.sleep(60)"]}), encoding="utf-8")
+        self.assertEqual(self.call("run", "--trial", trial, "--runner", runner, "--timeout", "1").returncode, 2)
+        self.assertFalse((trial / "grade.json").exists())
+        self.assertEqual(json.loads((trial / "execution.json").read_text(encoding="utf-8"))["error"], "TimeoutExpired")

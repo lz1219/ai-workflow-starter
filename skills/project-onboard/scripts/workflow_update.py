@@ -5,6 +5,7 @@ remain the caller's responsibility. Python standard library and Git only.
 """
 
 import argparse
+import ast
 import base64
 import hashlib
 import json
@@ -12,6 +13,7 @@ import os
 from pathlib import Path
 import re
 import stat
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -19,6 +21,149 @@ import tempfile
 
 MANIFEST = ".ai-workflow.json"
 JOURNAL = ".ai-workflow-transaction.json"
+ENTRY_MARKER = "<!-- ai-workflow -->"
+
+
+def check_executable(cwd, executable):
+    if executable == "{python}":
+        return sys.executable
+    if os.path.dirname(executable) or Path(executable).is_absolute():
+        path = (cwd / executable).resolve()
+        return str(path) if path.is_file() and os.access(path, os.X_OK) else None
+    return shutil.which(executable)
+
+
+def run_checks(project, checks):
+    for check in checks:
+        cwd = project if check["cwd"] == "." else safe_path(project, check["cwd"])
+        argv = [sys.executable if arg == "{python}" else arg for arg in check["argv"]]
+        argv[0] = check_executable(cwd, check["argv"][0])
+        if argv[0] is None:
+            raise ValueError("Validation executable is unavailable in its working directory")
+        result = subprocess.run(argv, cwd=cwd, timeout=check.get("timeout", 120),
+                                env={**os.environ, "PYTHONIOENCODING": "utf-8"})
+        if result.returncode:
+            raise ValueError(f"Validation failed with exit code {result.returncode}")
+
+
+def doctor(project):
+    """Inspect the installation offline, without executing registered commands."""
+    report = {"healthy": True, "skills": {}, "errors": [], "warnings": []}
+    try:
+        if safe_path(project, JOURNAL).exists():
+            report["errors"].append("Unfinished transaction: run --rollback before installing or updating")
+        data = file_bytes(safe_path(project, MANIFEST))
+        if data is None:
+            raise ValueError("No installation manifest. Use --install for a new installation or --register for a known baseline.")
+        manifest = json.loads(data)
+        validate_manifest(project, manifest)
+        if not manifest["skills"]:
+            report["errors"].append("No registered skills")
+        for name, entry in manifest["skills"].items():
+            missing, modified = [], []
+            for path, expected in entry["files"].items():
+                data = file_bytes(safe_path(project, entry["target"] + "/" + path))
+                if data is None:
+                    missing.append(path)
+                elif digest(data) != expected:
+                    modified.append(path)
+            report["skills"][name] = {"revision": entry["revision"], "target": entry["target"],
+                                      "missing": missing, "modified": modified}
+            if missing:
+                report["errors"].append(f"{name}: missing installed files")
+            if modified:
+                report["warnings"].append(f"{name}: local customization detected; review during update")
+        if not manifest["checks"]:
+            report["errors"].append("No validation commands configured")
+        for check in manifest["checks"]:
+            cwd = project if check["cwd"] == "." else safe_path(project, check["cwd"])
+            if not cwd.is_dir():
+                report["errors"].append(f"Validation working directory is missing: {check['cwd']}")
+            executable = check["argv"][0]
+            if not check_executable(cwd, executable):
+                report["errors"].append("Validation executable is unavailable; inspect checks in the manifest")
+        agents = file_bytes(safe_path(project, "AGENTS.md")) or b""
+        if MANIFEST.encode() not in agents:
+            report["warnings"].append("AGENTS.md does not link the installation manifest")
+        report["checks"] = len(manifest["checks"])
+        report["checks_executed"] = False
+    except (ValueError, OSError, KeyError, TypeError) as error:
+        report["errors"].append(str(error))
+    report["healthy"] = not report["errors"]
+    return report
+
+
+def change_record(project, relative, data):
+    before = file_bytes(safe_path(project, relative))
+    return {"path": relative, "before": pack(before), "after": pack(data)} if before != data else None
+
+
+def install(project, source, revision, manifest, before_manifest, args):
+    changes = []
+    for name in args.install:
+        if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name):
+            raise ValueError("Invalid skill name")
+        target = args.target or f".{ 'agents' if args.tool == 'codex' else 'claude' }/skills/{name}"
+        target_path(project, target, name)
+        if name in manifest["skills"]:
+            entry = manifest["skills"][name]
+            if entry["target"] != target or entry["revision"] != revision:
+                raise ValueError(f"{name} is already registered elsewhere or at another version; use update")
+            print(f"ALREADY INSTALLED {name}; preserving local changes")
+            continue
+        files = source_files(source, revision, name)
+        text = files["SKILL.md"].decode("utf-8-sig")
+        if not re.search(r"(?m)^name:\s*" + re.escape(name) + r"\s*$", text):
+            raise ValueError(f"Skill metadata name does not match: {name}")
+        for path, data in files.items():
+            if path.endswith(".py"):
+                ast.parse(data, filename=path)
+            relative = target + "/" + path
+            local = file_bytes(safe_path(project, relative))
+            if local is not None and local != data:
+                raise ValueError(f"Existing file differs; nothing installed: {relative}")
+            change = change_record(project, relative, data)
+            if change:
+                changes.append(change)
+                print(f"INSTALL {relative}")
+        manifest["skills"][name] = {"target": target, "revision": revision,
+                                     "files": {path: digest(data) for path, data in files.items()}}
+        # These are workflow smoke checks, never a claim of business acceptance.
+        smoke = {"change-design": "requirements.py", "project-onboard": "maven_preflight.py"}.get(name)
+        if smoke and f"scripts/{smoke}" in files:
+            check = {"cwd": ".", "argv": ["{python}", "-B", target + "/scripts/" + smoke, "--help"], "timeout": 120}
+            if check not in manifest["checks"]:
+                manifest["checks"].append(check)
+        if name == "change-design":
+            board = file_bytes(safe_path(project, "docs/design/README.md")) or b""
+            if "由各需求的 `design.md` 和 `tasks.md` 生成。".encode() in board:
+                manifest["checks"].append({"cwd": ".", "argv": ["{python}", "-B", target + "/scripts/requirements.py", "--check"], "timeout": 120})
+    if args.checks_file:
+        manifest["checks"] = json.loads(args.checks_file.read_text(encoding="utf-8-sig"))
+    validate_manifest(project, manifest)
+    if not manifest["checks"]:
+        raise ValueError("This skill needs explicit validation commands via --checks-file")
+    for relative in (["AGENTS.md", "CLAUDE.md"] if args.tool == "claude" or (args.target or "").startswith(".claude/") else ["AGENTS.md"]):
+        current = file_bytes(safe_path(project, relative)) or b""
+        if ENTRY_MARKER.encode() in current:
+            continue
+        body = ("\n" + ENTRY_MARKER + "\n## AI 工作流\n\n"
+                "安装位置、源版本与检查命令见 `.ai-workflow.json`。按任务需要读取其中登记的 Skill。\n"
+                "局部修复保留简短计划和验证记录；若清单启用 change-design，需要独立设计时读取其约定。\n"
+                "收到“检查工作流”或“更新工作流”时，从登记上游的独立副本使用 workflow_update.py，\n"
+                "先运行 --doctor；更新先预览确定提交，确认无冲突后按已授权范围应用并验证。\n"
+                "<!-- /ai-workflow -->\n") if relative == "AGENTS.md" else "\n" + ENTRY_MARKER + "\n@AGENTS.md\n<!-- /ai-workflow -->\n"
+        changes.append(change_record(project, relative, current + body.encode("utf-8")))
+    after_manifest = json_bytes(manifest)
+    if not changes and after_manifest == before_manifest:
+        print("Already installed. Use --doctor to inspect local state.")
+        return
+    changes.append({"path": MANIFEST, "before": pack(before_manifest), "after": pack(after_manifest)})
+    if args.dry_run:
+        print(f"Installation preview only. Revision: {revision}")
+        return
+    apply_changes(project, changes, manifest["checks"])
+    print("Installation includes workflow smoke checks. Add project acceptance commands when applicable.")
 
 
 def digest(data):
@@ -170,7 +315,7 @@ def rollback(project):
     # Check ALL files before restoring any. Edits after interruption must survive.
     for change in changes:
         relative = change["path"]
-        if relative != MANIFEST and not re.fullmatch(r"\.(agents|claude)/skills/[a-z0-9-]+/.+", relative):
+        if relative not in (MANIFEST, "AGENTS.md", "CLAUDE.md") and not re.fullmatch(r"\.(agents|claude)/skills/[a-z0-9-]+/.+", relative):
             raise ValueError("Unexpected recovery path")
         current = file_bytes(safe_path(project, relative))
         if current not in (unpack(change["before"]), unpack(change["after"])):
@@ -194,12 +339,7 @@ def apply_changes(project, changes, checks):
                 raise ValueError(f"File changed since preview: {change['path']}")
             if change["path"] != MANIFEST:
                 write_file(path, unpack(change["after"]))
-        for check in checks:
-            cwd = project if check["cwd"] == "." else safe_path(project, check["cwd"])
-            argv = [sys.executable if arg == "{python}" else arg for arg in check["argv"]]
-            result = subprocess.run(argv, cwd=cwd, timeout=check.get("timeout", 120))
-            if result.returncode:
-                raise ValueError(f"Validation failed with exit code {result.returncode}")
+        run_checks(project, checks)
         # Checks must be read-only with respect to managed files.
         for change in changes:
             expected = change["before"] if change["path"] == MANIFEST else change["after"]
@@ -218,6 +358,10 @@ def run(args):
     project = args.project.resolve()
     if not project.is_dir():
         raise ValueError("Project directory does not exist")
+    if args.doctor:
+        report = doctor(project)
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        return 0 if report["healthy"] else 1
     if args.rollback:
         rollback(project)
         return
@@ -237,6 +381,11 @@ def run(args):
     validate_manifest(project, manifest)
     if manifest["upstream"] != origin:
         raise ValueError("Source remote does not match the registered upstream")
+    if args.install:
+        if len(set(args.install)) != len(args.install) or (args.target and len(args.install) != 1):
+            raise ValueError("Use distinct skill names; --target requires exactly one skill")
+        install(project, source, revision, manifest, before_manifest, args)
+        return
     if args.register:
         name = args.register
         if not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", name) or name in manifest["skills"]:
@@ -306,12 +455,18 @@ def main():
     mode.add_argument("--register", metavar="SKILL")
     mode.add_argument("--apply", action="store_true")
     mode.add_argument("--rollback", action="store_true")
+    mode.add_argument("--install", nargs="+", metavar="SKILL")
+    mode.add_argument("--doctor", action="store_true", help="Inspect installation offline without executing checks")
+    parser.add_argument("--tool", choices=("codex", "claude"), default="codex")
+    parser.add_argument("--dry-run", action="store_true", help="Preview installation; updates preview by default")
     parser.add_argument("--target")
     parser.add_argument("--checks-file", type=Path)
     args = parser.parse_args()
     try:
-        run(args)
-    except (ValueError, OSError, KeyError, TypeError, subprocess.SubprocessError) as error:
+        if args.dry_run and not args.install:
+            raise ValueError("--dry-run requires --install; updates preview by default")
+        return run(args) or 0
+    except (ValueError, OSError, KeyError, TypeError, SyntaxError, subprocess.SubprocessError) as error:
         print(str(error), file=sys.stderr)
         return 1
     return 0

@@ -4,6 +4,15 @@
 
 ## 使用
 
+已有可信的本仓库 Git 副本时，可以从目标项目根目录直接安装并登记版本：
+
+```sh
+python <上游副本>/skills/project-onboard/scripts/workflow_update.py --source <上游副本> --revision <提交或标签> --install project-onboard change-design
+python <上游副本>/skills/project-onboard/scripts/workflow_update.py --doctor
+```
+
+安装会保留已有项目指令，追加工作流入口，并配置基本检查。预览加 `--dry-run`，Claude Code 加 `--tool claude`。已有定制发生冲突时停止。详细行为见 [安装与更新](skills/project-onboard/references/workflow-update.md)。
+
 把 [project-onboard](skills/project-onboard/) 整个目录放到工具的技能目录下。个人配置一次即可在多个项目中调用。
 
 | 工具 | 个人技能目录 | 仓库技能目录 |
@@ -40,7 +49,7 @@ Maven 项目可从 Skill 目录运行 `python scripts/maven_preflight.py --proje
 
 每个需求目录配一份 [任务看板](skills/change-design/assets/tasks.md)，按增量记录本次计划、实际改动和证据。总看板显示当前任务、已完成增量、需求关系和阻塞原因。隔离测试与正式数据验收可以单独交付时，分别记录进度。
 
-采用本模板的项目可用 [看板工具](skills/change-design/scripts/requirements.py) 刷新或检查 `docs/design/README.md`。例如把 Skill 放进目标仓库的 `.agents/skills/` 后，从目标仓库根目录执行以下命令。两个脚本均使用 Python 3.9 或更新版本。
+采用本模板的项目可用 [看板工具](skills/change-design/scripts/requirements.py) 刷新或检查 `docs/design/README.md`。例如把 Skill 放进目标仓库的 `.agents/skills/` 后，从目标仓库根目录执行以下命令。辅助脚本使用 Python 3.9 或更新版本。
 
 ```sh
 python .agents/skills/change-design/scripts/requirements.py --write
@@ -54,5 +63,7 @@ python .agents/skills/change-design/scripts/requirements.py --check
 按 [同步参考](skills/project-onboard/references/workflow-update.md) 在目标项目的 `.ai-workflow.json` 登记上游、启用的 Skill、源提交、文件摘要和验证命令，在 `AGENTS.md` 保留更新入口。以后可说「更新工作流」，让 AI 获取确定版本并使用更新工具预览和应用。出现冲突时保持原状，验证失败时回退，强制中断后可恢复。目标项目继续维护自己的开发规范、构建配置和需求记录。
 
 ## 验证接入包
+
+AI 任务效果使用 [真实任务评测](evals/README.md)，提供 Python CLI、续做、Maven/Spring、Gradle＋Node 的隔离场景和外部验收，可比较原有项目指令、当前版和候选版。脚本测试通过与 AI 任务效果分别记录。
 
 在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、编号与引用校验、Markdown 格式容忍、验收安排提示，以及 Maven 参数和 JDK 环境的传递。更新工具使用隔离 Git 仓库验证预览、定制保留、冲突、回退和中断恢复。运行测试需要 Python 和 Git，无需访问网络。
