@@ -1,21 +1,68 @@
 # 更新项目内的工作流
 
-项目需要按自然语言更新时，在目标仓库的 `AGENTS.md` 写明约定。记录上游仓库和分支或标签、启用的 Skill 及目标目录、每个目录当前对应的源提交、同步后要运行的项目验证。默认上游为 [ai-workflow-starter](https://github.com/lz1219/ai-workflow-starter)。
+收到「更新工作流」时，使用 [更新工具](../scripts/workflow_update.py)。它只同步项目中登记的 `.agents/skills/<名称>` 或 `.claude/skills/<名称>`，保留项目开发规范、需求和构建文件。需要 Python 3.9+ 和 Git。
 
-例如只启用需求设计的 Codex 项目，可在 `AGENTS.md` 添加一段，并填写实际版本。
+当前支持本仓库使用的普通文件（Git `100644`），Python 脚本通过解释器运行。链接、可执行文件模式、仅大小写改名，以及文件与目录相互转换需要人工处理，工具在写入前报告错误。
 
-```md
-## 更新工作流
+## 首次登记
 
-收到「更新工作流」时，从 https://github.com/lz1219/ai-workflow-starter 的 main
-同步 skills/change-design 到 .agents/skills/change-design。当前源提交填写为实际提交 SHA。
-先检查项目改动和上游差异，保留冲突文件。同步后从仓库根目录运行
-python .agents/skills/change-design/scripts/requirements.py --check，
-验证通过后更新源提交并报告结果。
+项目根目录的 `.ai-workflow.json` 保存上游地址、每个 Skill 的目标目录、源提交、上游文件 SHA-256，以及验证命令。该文件随项目提交。`AGENTS.md` 只保留更新入口，避免重复维护版本号。
+
+1. 获取可信上游的独立 Git 副本，核对 remote 和目标提交。默认上游为 `https://github.com/lz1219/ai-workflow-starter`。凭据交给 Git 凭据管理，不写进 remote、清单或日志。工具读取 Git 对象，不读取副本中尚未提交的修改，也不会自行联网。
+2. 找到已安装 Skill 的准确源提交，用下面的命令登记。首次登记要求上游文件与已安装文件逐字节一致，额外的项目文件可保留。换行差异也会被报告。存在定制或源版本不明时先核对差异和历史，不把最新提交猜作旧基线。需要重装基线时先另存定制，准确安装后登记，再恢复已审阅的定制。从 Git 导出提交内容可避免检出时的换行转换。
+3. 在清单的 `checks` 中填写已验证的只读检查命令。也可通过 `--checks-file <JSON文件>` 在登记时导入命令数组。没有验证命令时工具允许预览，但拒绝应用更新。
+
+以下示例从目标项目根目录运行。`<上游副本>` 是独立 Git 副本的实际路径，`<已安装源SHA>` 是旧版本提交。
+
+```sh
+python <上游副本>/skills/project-onboard/scripts/workflow_update.py --source <上游副本> --revision <已安装源SHA> --register change-design
 ```
 
-收到「更新工作流」后执行以下步骤。
+默认目标为 `.agents/skills/change-design`。Claude Code 项目加 `--target .claude/skills/change-design`。其他 Skill 分别登记，目前每个名称只登记一个目标目录。
 
-1. 获取约定的上游版本并解析出提交。从登记的源提交比较上游变化和目标目录中的改动，包括已经提交的项目定制。对两边同时改动且无法合并的文件，列出路径并保留项目版本。缺少源提交时，先比较差异，标明需要判断归属的文件。
-2. 同步已登记的 Skill 目录及其模板、参考和脚本。上游删除的文件只有在确认仍等同于旧上游文件时才一同删除。项目维护自己的开发规范、需求历史和构建配置。
-3. 运行登记的验证。例如采用本仓库看板模板的项目运行 `python .agents/skills/change-design/scripts/requirements.py --check`，按需用 `--review <需求目录名>` 检查当前需求。验证通过后在同步记录更新源提交，报告改动、验证结果和待合并项。部分更新时保留旧源提交，并列出已同步的文件。
+采用需求看板的项目可在清单中设置：
+
+```json
+"checks": [
+  {
+    "cwd": ".",
+    "argv": ["{python}", ".agents/skills/change-design/scripts/requirements.py", "--check"],
+    "timeout": 120
+  }
+]
+```
+
+这是清单中的字段片段。`--checks-file` 接收其数组部分。`{python}` 使用运行更新工具的 Python。命令以参数数组直接执行，不经 shell，工作目录相对于目标项目。未采用看板时填写实际启用的检查。检查应验证工作流与现有项目记录的兼容性，不能用 `--write` 修复数据或执行发布、迁移等有副作用的命令。工具只能恢复管理范围内的文件，不能撤销外部命令造成的其他副作用。
+
+## 每次更新
+
+1. 读取清单和 Git 状态，获取约定分支或标签，解析为确定的提交 SHA。核对上游变更，尤其是将要运行的脚本。使用独立副本中的更新工具，以便目标项目中的工具本身也能更新。
+2. 运行预览。工具按旧上游摘要、本地内容和新上游内容比较，输出新增、修改、删除和保留定制的文件。上游与本地同时修改且内容不同，或上游删除了本地已修改文件时，整次更新停止，所有已登记 Skill 保持原状。人工解决冲突后重新预览。
+3. 用户已要求更新且范围明确时，继续用同一个确定 SHA 执行 `--apply`，无需另行确认。工具在写入前创建恢复记录，修改完成后运行清单检查，全部通过才登记新版本。验证失败或普通写入异常时恢复本次修改和旧清单。
+4. 记录更新结果、检查结果和保留的定制，按项目流程提交。不要将“更新工具成功”描述为业务功能验收通过。
+
+```sh
+python <上游副本>/skills/project-onboard/scripts/workflow_update.py --source <上游副本> --revision <目标SHA>
+python <上游副本>/skills/project-onboard/scripts/workflow_update.py --source <上游副本> --revision <目标SHA> --apply
+```
+
+项目目录可用 `--project <项目根目录>` 指定。重复更新到同一提交且无新变化时不写文件。
+
+## 中断恢复
+
+写入过程中有 `.ai-workflow-transaction.json` 恢复记录。成功或回退完成后自动移除，不提交该文件。若进程被强制终止，下次更新会停止并提示恢复：
+
+```sh
+python <上游副本>/skills/project-onboard/scripts/workflow_update.py --rollback
+```
+
+恢复前会核对所有涉及文件。若中断后有人修改了这些文件，工具保留记录和文件并报告冲突，避免覆盖后来的修改。先审阅并另存需要保留的内容，再恢复。同步期间避免其他进程编辑同一 Skill。回退可能留下空目录，不影响文件内容或登记版本。
+
+## 项目入口示例
+
+```md
+收到「更新工作流」时，读取根目录 .ai-workflow.json，从登记上游的 main
+获取确定提交，使用独立上游副本中的 workflow_update.py 预览差异。
+无冲突时应用同一提交并运行清单检查，失败则恢复本次修改。
+有中断恢复记录时先恢复。交付更新版本、保留定制和验证结果。
+```

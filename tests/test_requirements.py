@@ -88,7 +88,7 @@ class RequirementsTests(unittest.TestCase):
         requirement = self.design_root / "Req-20261113-数据导出"
         requirement.mkdir(parents=True)
         (requirement / "design.md").write_text(
-            '---\ntitle: "数据导出"\n---\n\n| AC-1 | 导出 | 下载文件 |\n',
+            '---\ntitle: "数据导出"\n---\n\n## 需求与验收\n| AC-1 | 导出 | 下载文件 |\n',
             encoding="utf-8",
         )
         tasks = requirement / "tasks.md"
@@ -124,3 +124,50 @@ class RequirementsTests(unittest.TestCase):
         self.assertEqual(invalid.returncode, 1, invalid.stderr)
         self.assertIn("阻塞时须记录", invalid.stderr)
         self.assertEqual(self.board.read_text(encoding="utf-8"), content)
+
+    def create_requirement(self, extra=""):
+        requirement = self.design_root / "Req-example"
+        requirement.mkdir(parents=True)
+        (requirement / "design.md").write_text(
+            '---\ntitle: "Example"\n---\n## 1. 需求与验收\n'
+            '| AC-1 | input | output |\n' + extra, encoding="utf-8")
+        (requirement / "tasks.md").write_text(
+            (SCRIPT.parent.parent / "assets/tasks.md").read_text(encoding="utf-8"), encoding="utf-8")
+        return requirement
+
+    def test_unknown_verification_reference_is_not_a_definition(self):
+        requirement = self.create_requirement(
+            '## 3. 实施、验证与发布\n| 验收项 | 验证方式 |\n|---|---|\n| AC-999 | test |\n')
+        tasks = requirement / "tasks.md"
+        tasks.write_text(tasks.read_text(encoding="utf-8").replace("AC-1", "AC-999"), encoding="utf-8")
+        for mode in (("--write",), ("--review", requirement.name)):
+            with self.subTest(mode=mode):
+                result = self.run_board(self.project, *mode)
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("未知验收项", result.stderr)
+        self.assertFalse(self.board.exists())
+
+    def test_duplicate_definitions_are_rejected(self):
+        self.create_requirement('| AC-1 | another input | conflicting output |\n')
+        result = self.run_board(self.project, "--write")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("重复验收编号", result.stderr)
+
+    def test_fenced_examples_cannot_define_acceptance(self):
+        requirement = self.create_requirement('```md\n| AC-999 | example | example |\n```\n')
+        tasks = requirement / "tasks.md"
+        tasks.write_text(tasks.read_text(encoding="utf-8").replace("AC-1", "AC-999"), encoding="utf-8")
+        result = self.run_board(self.project, "--write")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("未知验收项", result.stderr)
+
+    def test_table_whitespace_and_fenced_task_examples_are_accepted(self):
+        requirement = self.create_requirement()
+        tasks = requirement / "tasks.md"
+        original = tasks.read_text(encoding="utf-8")
+        tasks.write_text('```md\n' + original + '\n```\n' + original.replace(' | ', '|'), encoding="utf-8")
+        result = self.run_board(self.project, "--write")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        reviewed = self.run_board(self.project, "--review", requirement.name)
+        self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
+        self.assertIn("不代表验收通过", reviewed.stdout)

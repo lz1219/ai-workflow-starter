@@ -14,9 +14,65 @@ RELATIONS = ("depends_on", "follows", "related")
 TASK_HEADER = "| 编号 | 计划任务 | 状态 | 验收项 | 实际完成内容 | 证据或交接 |"
 TASK_STATES = {"待办", "进行中", "阻塞", "完成", "取消"}
 EMPTY_CELLS = {"", "—", "-"}
-ACCEPTANCE_ROW = re.compile(r"^\|\s*(AC-\d+)\s*\|")
 ACCEPTANCE_SECTION = re.compile(r"^##\s+(?:\d+\.\s*)?需求与验收\s*$")
 VERIFICATION_PLACEHOLDERS = EMPTY_CELLS | {"测试、命令或手工步骤", "实现后填写"}
+
+
+def visible_lines(lines):
+    """Ignore fenced examples consistently in design and task validation."""
+    fence = None
+    for raw in lines:
+        line = raw.strip()
+        if fence:
+            if len(line) >= len(fence) and not line.strip(fence[0]):
+                fence = None
+            continue
+        marker = re.match(r"^(`{3,}|~{3,})", line)
+        if marker:
+            fence = marker[1]
+            yield ""  # A code block terminates the preceding table.
+        else:
+            yield line
+
+
+def table_cells(line):
+    if not line.startswith("|"):
+        return None
+    cells = re.split(r"(?<!\\)\|", line)[1:]
+    if cells and cells[-1] == "":
+        cells.pop()
+    return [cell.strip() for cell in cells]
+
+
+def acceptance_data(lines):
+    criteria = set()
+    verification = set()
+    references = set()
+    section = ""
+    in_verification_table = False
+    for line in visible_lines(lines):
+        if re.match(r"^#{1,2}\s", line):
+            section = line
+            in_verification_table = False
+        cells = table_cells(line)
+        if not cells:
+            in_verification_table = False
+            continue
+        criterion = cells[0] if re.fullmatch(r"AC-\d+", cells[0]) else None
+        if ACCEPTANCE_SECTION.fullmatch(section):
+            if criterion:
+                if criterion in criteria:
+                    raise ValueError(f"重复验收编号：{criterion}")
+                criteria.add(criterion)
+        elif cells[0] == "验收项":
+            in_verification_table = "验证" in section or "验收" in section
+        elif in_verification_table and criterion:
+            references.add(criterion)
+            if any(cell not in VERIFICATION_PLACEHOLDERS for cell in cells[1:]):
+                verification.add(criterion)
+    if references - criteria:
+        raise ValueError("验证表引用了未知验收项：" + ", ".join(sorted(references - criteria)))
+    return criteria, verification
 
 
 def read_design(path, *, review=False):
@@ -41,21 +97,26 @@ def read_design(path, *, review=False):
             raise ValueError(f"{path}: {field} 应为目录名列表")
         if len(references) != len(set(references)):
             raise ValueError(f"{path}: {field} 含重复引用")
-    acceptance_ids = {match[1] for line in lines if (match := ACCEPTANCE_ROW.match(line))}
+    try:
+        acceptance_ids, verification = acceptance_data(lines)
+    except ValueError as error:
+        raise ValueError(f"{path}: {error}") from error
     metadata["tasks"] = read_tasks(path.with_name("tasks.md"), acceptance_ids)
     if review:
-        metadata["coverage_warnings"] = review_coverage(lines, metadata["tasks"])
+        metadata["coverage_warnings"] = review_coverage(acceptance_ids, verification, metadata["tasks"])
     return metadata
 
 
 def read_tasks(path, acceptance_ids):
     if not path.is_file():
         return None
-    lines = [line.strip() for line in path.read_text(encoding="utf-8-sig").splitlines()]
-    if lines.count(TASK_HEADER) != 1:
+    lines = list(visible_lines(path.read_text(encoding="utf-8-sig").splitlines()))
+    headers = [i for i, line in enumerate(lines) if table_cells(line) == table_cells(TASK_HEADER)]
+    if len(headers) != 1:
         raise ValueError(f"{path}: 应包含一份标准任务表")
-    table = lines[lines.index(TASK_HEADER) + 1:]
-    if not table or not re.fullmatch(r"\|(?:\s*:?-{3,}:?\s*\|){6}", table[0]):
+    table = lines[headers[0] + 1:]
+    separators = table_cells(table[0]) if table else None
+    if not separators or len(separators) != 6 or any(not re.fullmatch(r":?-{3,}:?", cell) for cell in separators):
         raise ValueError(f"{path}: 缺少任务表分隔行")
 
     tasks = []
@@ -63,10 +124,10 @@ def read_tasks(path, acceptance_ids):
     for line in table[1:]:
         if not line.startswith("|"):
             break
-        cells = re.split(r"(?<!\\)\|", line)
-        if len(cells) != 8 or cells[-1]:
+        cells = table_cells(line)
+        if len(cells) != 6:
             raise ValueError(f"{path}: 任务行应包含六列")
-        task_id, plan, status, acceptance, result, evidence = (cell.strip() for cell in cells[1:-1])
+        task_id, plan, status, acceptance, result, evidence = cells
         if not re.fullmatch(r"T[1-9]\d*", task_id) or task_id in seen or plan in EMPTY_CELLS:
             raise ValueError(f"{path}: 无效、重复或缺少计划的任务 {task_id!r}")
         seen.add(task_id)
@@ -90,40 +151,7 @@ def read_tasks(path, acceptance_ids):
     return tasks
 
 
-def review_coverage(lines, tasks):
-    criteria = set()
-    verification = set()
-    section = ""
-    in_verification_table = False
-    fence = None
-    for line in lines:
-        line = line.strip()
-        if fence:
-            if len(line) >= len(fence) and not line.strip(fence[0]):
-                fence = None
-            continue
-        marker = re.match(r"^(`{3,}|~{3,})", line)
-        if marker:
-            fence = marker[1]
-            in_verification_table = False
-            continue
-        if re.match(r"^##\s", line):
-            section = line
-            in_verification_table = False
-        row = ACCEPTANCE_ROW.match(line)
-        if ACCEPTANCE_SECTION.fullmatch(section):
-            if row:
-                criteria.add(row[1])
-            continue
-        if re.match(r"^\|\s*验收项\s*\|", line):
-            in_verification_table = "验证" in section or "验收" in section
-        elif not line.startswith("|"):
-            in_verification_table = False
-        elif in_verification_table and row:
-            cells = re.split(r"(?<!\\)\|", line[row.end():])
-            if any(cell.strip() not in VERIFICATION_PLACEHOLDERS for cell in cells):
-                verification.add(row[1])
-
+def review_coverage(criteria, verification, tasks):
     if not criteria:
         return ["未识别「需求与验收」中的 AC-* 条目，请核对设计范围和表格。"]
     for task in tasks or []:
@@ -240,7 +268,7 @@ def main():
             for warning in warnings:
                 print(f"{args.review}: {warning}", file=sys.stderr)
             if not warnings:
-                print(f"{args.review}: 验收项均有关联任务或验证记录。")
+                print(f"{args.review}: 验收项均已安排任务或验证；此检查不代表验收通过。")
             return 0
         content = render_board(load_designs(root), (root.parent / "project.md").is_file())
         if args.write:

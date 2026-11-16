@@ -1,6 +1,6 @@
 ---
 name: project-onboard
-description: Onboard existing projects by identifying module entry points, tooling, CI, and verified commands, or scaffold a new Spring project with Maven or Gradle. Use for project initialization, repository discovery, or drafting AGENTS.md and project development guidance across Java, Python, Node, and mixed repositories.
+description: Onboard existing projects by identifying module entry points, tooling, CI, and verified commands, scaffold a new Spring project, or update registered workflow skills. Use for project initialization, repository discovery, workflow updates, or drafting AGENTS.md and development guidance across Java, Python, Node, and mixed repositories.
 ---
 
 # 项目接入
@@ -11,6 +11,7 @@ description: Onboard existing projects by identifying module entry points, tooli
 
 - **创建项目**：区分目标目录和参考项目。目标目录已有业务工程时核对目标与范围。
 - **接入已有项目**：先只读探查，再提交草案，按已确认的范围更新项目文档。
+- **更新已安装工作流**：按 [同步参考](references/workflow-update.md) 使用登记清单和更新工具，先预览，再在无冲突时同步和验证。
 - 用户只要求设计或探查时，交付草案或报告。已明确要求创建或落地且范围清楚时，继续执行。只询问会实质影响结果的未决问题。
 
 ## 创建项目
@@ -33,5 +34,5 @@ description: Onboard existing projects by identifying module entry points, tooli
 
 - 根 `AGENTS.md` 写项目定位、开发规范与需求索引、关键验证入口。模块有独立约定时，在模块的 `AGENTS.md` 或开发文档中记录差异，根入口链接过去。团队需要 Claude Code 入口时，可在 `CLAUDE.md` 引用 `AGENTS.md`。
 - 优先沿用项目自己的开发规范。缺失时用 [开发规范模板](assets/development.md) 创建 `docs/development.md`。记录各模块的入口、工作目录、运行时、实际命令、环境要求及代码参考。团队长期约定保存在项目内或引用固定版本。
-- 在项目开发规范中说明设计入口、评审规则和看板命令。若项目要用「更新工作流」同步仓库内的 Skill，按 [同步参考](references/workflow-update.md) 记录来源、启用目录、当前源提交和验证命令。
+- 在项目开发规范中说明轻量变更、功能设计和高风险评审的适用范围，以及已启用的看板命令。若项目要用「更新工作流」同步仓库内的 Skill，按 [同步参考](references/workflow-update.md) 建立版本清单，根入口只记录调用方式。
 - 交付时列出新增或复用的文档及验证结果。详细探查证据留在接入草案或接入 PR。

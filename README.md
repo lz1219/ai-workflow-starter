@@ -30,7 +30,9 @@ Maven 项目可从 Skill 目录运行 `python scripts/maven_preflight.py --proje
 
 把 [change-design](skills/change-design/) 按上表放入同一技能目录，在目标项目里直接描述需求，例如「给看板增加按部门筛选和导出，先出设计」。
 
-AI 从 `AGENTS.md` 进入，核对现有行为、调用入口和项目规范，再用 [设计模板](skills/change-design/assets/design.md) 创建或更新设计。默认位置为 `docs/design/Req-YYYYMMDD-需求名称/design.md`。设计记录业务规则、验收、技术方案和评审决定，按需补充 [技术章节](skills/change-design/references/design-sections.md)。前后端或多个仓库共同交付同一能力时，共用主设计和验收编号，各模块沿用自己的验证命令。
+需要独立设计时，AI 从 `AGENTS.md` 进入，核对现有行为、调用入口和项目规范，再用 [设计模板](skills/change-design/assets/design.md) 创建或更新设计。默认位置为 `docs/design/Req-YYYYMMDD-需求名称/design.md`。设计记录业务规则、验收、技术方案和评审决定，按需补充 [技术章节](skills/change-design/references/design-sections.md)。前后端或多个仓库共同交付同一能力时，共用主设计和验收编号，各模块沿用自己的验证命令。
+
+先按影响选择工作量。预期清楚的局部调整在任务或 PR 中记录方案和验证即可。需要拆分实施或跨模块协调的功能维护设计与任务，高风险变更补充评审、兼容、发布和恢复安排。用户明确要求设计时交付设计。
 
 评审时可以直接说「把导出范围改成当前筛选结果」，AI 更新同一份设计并指出受影响的验收项。决定实施时说「按这份设计实现」。换会话时可以描述功能，AI 查找已有设计，从已确认的方案、验收项和关联任务继续。实现后把测试结果写回，PR 引用设计。
 
@@ -49,8 +51,8 @@ python .agents/skills/change-design/scripts/requirements.py --check
 
 ## 更新工作流
 
-在目标项目的 `AGENTS.md` 按 [同步参考](skills/project-onboard/references/workflow-update.md) 登记上游、启用的 Skill、源提交和验证命令。以后可在目标项目里说「更新工作流」，让 AI 比较上游与本地、同步已登记的目录并验证。目标项目继续维护自己的开发规范、构建配置和需求记录。
+按 [同步参考](skills/project-onboard/references/workflow-update.md) 在目标项目的 `.ai-workflow.json` 登记上游、启用的 Skill、源提交、文件摘要和验证命令，在 `AGENTS.md` 保留更新入口。以后可说「更新工作流」，让 AI 获取确定版本并使用更新工具预览和应用。出现冲突时保持原状，验证失败时回退，强制中断后可恢复。目标项目继续维护自己的开发规范、构建配置和需求记录。
 
 ## 验证接入包
 
-在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、阻塞记录、验收覆盖提示、路径校验，以及 Maven 参数和 JDK 环境的传递。运行这些测试只需要 Python。
+在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、编号与引用校验、Markdown 格式容忍、验收安排提示，以及 Maven 参数和 JDK 环境的传递。更新工具使用隔离 Git 仓库验证预览、定制保留、冲突、回退和中断恢复。运行测试需要 Python 和 Git，无需访问网络。
