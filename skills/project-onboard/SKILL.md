@@ -1,11 +1,11 @@
 ---
 name: project-onboard
-description: Onboard existing projects by identifying module entry points, tooling, CI, and verified commands, scaffold a new Spring project, or update registered workflow skills. Use for project initialization, repository discovery, workflow updates, or drafting AGENTS.md and development guidance across Java, Python, Node, and mixed repositories.
+description: Create a Spring project, establish or repair project development guidance from actual repository evidence, or install, diagnose, and update workflow skills. Use for project initialization, onboarding existing Java, Python, Node, or mixed repositories, maintaining AGENTS.md and development guidance, and workflow installation or maintenance.
 ---
 
 # 项目接入
 
-让下一个开发者或 AI 找到代码入口、适用规范和可复现的验证命令。参照 [基础开发规范](references/base-standards.md)，以项目已有约定、构建配置和 CI 为依据。
+让下一个开发者或 AI 找到代码入口、适用规范和可复现的验证命令，以项目已有约定、构建配置和 CI 为依据。探查或维护开发规范时参照 [基础开发规范](references/base-standards.md)；仅安装、检查或更新工作流时读取同步参考即可。
 
 ## 选择入口
 

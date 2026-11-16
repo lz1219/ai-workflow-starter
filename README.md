@@ -41,7 +41,11 @@ Maven 项目可从 Skill 目录运行 `python scripts/maven_preflight.py --proje
 
 需要独立设计时，AI 从 `AGENTS.md` 进入，核对现有行为、调用入口和项目规范，再用 [设计模板](skills/change-design/assets/design.md) 创建或更新设计。默认位置为 `docs/design/Req-YYYYMMDD-需求名称/design.md`。设计记录业务规则、验收、技术方案和评审决定，按需补充 [技术章节](skills/change-design/references/design-sections.md)。前后端或多个仓库共同交付同一能力时，共用主设计和验收编号，各模块沿用自己的验证命令。
 
+模板在对应小节提示何时使用时序图、ER 图、状态图、模块关系图或交互原型，并按影响展开异常处理、契约、数据迁移、质量要求和发布恢复。简单变更只保留必要内容，复杂契约与附件由主设计链接。评审核对图、业务规则、契约、数据约束与验收是否一致，图能渲染不等于方案正确。
+
 先按影响选择工作量。预期清楚的局部调整在任务或 PR 中记录方案和验证即可。需要拆分实施或跨模块协调的功能维护设计与任务，高风险变更补充评审、兼容、发布和恢复安排。用户明确要求设计时交付设计。
+
+两个 Skill 按职责选择，日常变更不必重复接入项目。设计时读取技术章节，实施或续做时读取 [小步实施与验收](skills/change-design/references/implementation.md)，新建或演进需求、维护看板时再读取 [需求演进与索引](skills/change-design/references/requirement-lifecycle.md)。每个实施增量按“选择结果 → 确定验证方法 → 实现 → 验证 → 记录证据 → 下一项”推进，在已有授权内连续工作。实际结果附环境及对应版本或工作区范围，命令和 PR 链接本身不代表通过；局部验证后仍按影响补充整体验收。
 
 评审时可以直接说「把导出范围改成当前筛选结果」，AI 更新同一份设计并指出受影响的验收项。决定实施时说「按这份设计实现」。换会话时可以描述功能，AI 查找已有设计，从已确认的方案、验收项和关联任务继续。实现后把测试结果写回，PR 引用设计。
 
@@ -65,5 +69,7 @@ python .agents/skills/change-design/scripts/requirements.py --check
 ## 验证接入包
 
 AI 任务效果使用 [真实任务评测](evals/README.md)，提供 Python CLI、续做、Maven/Spring、Gradle＋Node 的隔离场景和外部验收，可比较原有项目指令、当前版和候选版。脚本测试通过与 AI 任务效果分别记录。
+
+设计深度、图示选择与续做行为另用 [设计工作流评审场景](evals/design-review.md) 检查，评审实际产物和过程，不用标题或图的数量代替质量。
 
 在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、编号与引用校验、Markdown 格式容忍、验收安排提示，以及 Maven 参数和 JDK 环境的传递。更新工具使用隔离 Git 仓库验证预览、定制保留、冲突、回退和中断恢复。运行测试需要 Python 和 Git，无需访问网络。
