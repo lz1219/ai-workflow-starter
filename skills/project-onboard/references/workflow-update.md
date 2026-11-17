@@ -17,6 +17,8 @@ python <上游副本>/skills/project-onboard/scripts/workflow_update.py --doctor
 
 安装会保留原有 AGENTS.md 并追加工作流入口；Claude Code 另在 CLAUDE.md 追加引用。默认配置工作流脚本的启动检查，识别到本工具生成的需求看板时增加看板检查。启动检查只证明脚本能运行，项目验收命令仍按实际约定补充，可用 `--checks-file` 提供完整检查数组。
 
+项目将安装的 Skill 提交到 Git 时，按登记目录保留文件原始字节，避免 Windows 检出时的换行转换被识别为定制。可沿用项目现有属性，或在 `.gitattributes` 中为已启用的目录加 `.agents/skills/** -text` 或 `.claude/skills/** -text`。在一次新检出后用 `--doctor` 核对登记文件。
+
 `--doctor` 默认离线且不执行清单命令，输出 JSON，报告源版本、缺失文件、已修改文件、验证命令是否配置以及中断恢复记录。定制是提示，缺失文件或恢复未完成是错误。它不会访问远端，也不证明版本最新或业务测试通过。无错误退出 0，有错误退出 1。
 
 ## 已有安装首次登记

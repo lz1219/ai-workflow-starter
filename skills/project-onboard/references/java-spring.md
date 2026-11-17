@@ -30,6 +30,8 @@
 
 Maven 先核对 `mvn -version` 中的 Java 版本。Shell 的 `java -version` 和 IDE 的项目 JDK 可能与 Maven 不同。需要切换时只在本次验证进程设置 `JAVA_HOME` 与 `PATH`，再确认 Maven 实际使用了目标版本。可用 [Maven 预检脚本](../scripts/maven_preflight.py)完成检查，按需用 `--java-home` 指定已安装的 JDK，再用 `--verify` 跑完整构建，或在 `--` 后传入项目的 Maven 参数。
 
+核对 Maven profile 和 CI 参数是否跳过测试。若有效配置使用 `maven.test.skip=true`，如需执行回归，在验证命令显式开启测试。在 PowerShell 中把含点的 `-D` 参数整体放在引号里，例如 `mvn "-Dmaven.test.skip=false" verify`。从测试输出或 Surefire/Failsafe 报告确认对应测试实际执行、数量和结果。离线模式下遇到依赖或测试运行器的缓存缺失、仓库来源不匹配时，按项目既有 Maven 仓库设置解析依赖，再复跑相同检查。
+
 Gradle 从项目实际入口运行 `--version`，核对启动及构建进程使用的 JDK，并从构建文件确认 Java toolchain 和实际测试任务。跨子项目时记录根目录、模块路径和任务，例如根目录下运行 `gradlew.bat :backend:check`。已有 Wrapper 时复用。新建 Spring 项目交付使用环境提供的 `mvn` 或 `gradle`，采用生成器时在交付前检查 Wrapper 文件和目录。
 
 项目入口记录 JDK、构建工具、执行目录和经过验证的命令。另记测试报告、启动探测结果和缺失的环境。CI 调用项目构建入口，所需 JDK 和构建工具版本由 CI 环境提供。
