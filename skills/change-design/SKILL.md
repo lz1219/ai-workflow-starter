@@ -53,4 +53,4 @@ description: Design feature or behavior changes and carry them through verifiabl
 
 任务完成需要对应范围的实际结果。仅有命令、PR 链接或文字声明不足以证明通过。区分已安排、通过、失败和等待条件；局部测试不能替代跨模块验收。交付前核对当前改动上的证据，代码或契约变化后重新判断历史结果是否适用。
 
-采用本模板时，按 [需求演进与索引](references/requirement-lifecycle.md) 刷新或检查看板；`--review` 仅检查验收安排覆盖，不验证设计语义或实际行为。发布时把长期有效的行为和契约同步到项目已有规格或 API 定义。
+采用本模板时，按 [需求演进与索引](references/requirement-lifecycle.md) 刷新或检查看板。`--review` 检查验收安排覆盖。重新评审已确认的设计时，可加 `--base <上次确认的提交>` 查看验收条目变化及关联任务，再判断哪些结果需要复验。发布时把长期有效的行为和契约同步到项目已有规格或 API 定义。

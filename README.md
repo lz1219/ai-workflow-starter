@@ -4,6 +4,13 @@
 
 ## 使用
 
+| 现在要做什么 | 在目标项目里可以直接这样说 |
+| --- | --- |
+| 第一次接入已有项目 | “用 project-onboard 找到订单模块的入口和实际验证命令，沿用团队的开发说明。” |
+| 改一个已有行为 | “导出应当只含当前筛选结果。先找对应需求，更新受影响的规则和验收。” |
+| 从中断处继续 | “接着做导出需求。核对原任务、当前改动和上次验证，完成下一个可验证的结果。” |
+| 更新项目里已登记的工作流 | “更新工作流，先预览本项目的定制和上游改动。” |
+
 已有可信的本仓库 Git 副本时，可以从目标项目根目录直接安装并登记版本：
 
 ```sh
@@ -13,7 +20,7 @@ python <上游副本>/skills/project-onboard/scripts/workflow_update.py --doctor
 
 安装会保留已有项目指令，追加工作流入口，并配置基本检查。预览加 `--dry-run`，Claude Code 加 `--tool claude`。已有定制发生冲突时停止。详细行为见 [安装与更新](skills/project-onboard/references/workflow-update.md)。
 
-把 [project-onboard](skills/project-onboard/) 整个目录放到工具的技能目录下。个人配置一次即可在多个项目中调用。
+上述命令已安装两个 Skill。若希望个人跨项目调用，也可以把需要的 Skill 整个目录复制到对应工具的个人技能目录。
 
 | 工具 | 个人技能目录 | 仓库技能目录 |
 |---|---|---|
@@ -37,7 +44,7 @@ Maven 项目可从 Skill 目录运行 `python scripts/maven_preflight.py --proje
 
 ## 从需求到实现
 
-把 [change-design](skills/change-design/) 按上表放入同一技能目录，在目标项目里直接描述需求，例如「给看板增加按部门筛选和导出，先出设计」。
+启用 [change-design](skills/change-design/) 后，在目标项目里直接描述需求，例如「给看板增加按部门筛选和导出，先出设计」。
 
 需要独立设计时，AI 从 `AGENTS.md` 进入，核对现有行为、调用入口和项目规范，再用 [设计模板](skills/change-design/assets/design.md) 创建或更新设计。默认位置为 `docs/design/Req-YYYYMMDD-需求名称/design.md`。设计记录业务规则、验收、技术方案和评审决定，按需补充 [技术章节](skills/change-design/references/design-sections.md)。前后端或多个仓库共同交付同一能力时，共用主设计和验收编号，各模块沿用自己的验证命令。
 
@@ -62,7 +69,11 @@ python .agents/skills/change-design/scripts/requirements.py --write
 python .agents/skills/change-design/scripts/requirements.py --check
 ```
 
+已有手写需求索引时，在希望显示看板的位置选定[自动更新区域](skills/change-design/references/requirement-lifecycle.md#看板与检查)，区域外继续由团队维护。
+
 评审指定需求时，可运行 `python .agents/skills/change-design/scripts/requirements.py --review "Req-YYYYMMDD-需求名称"`。它检查「需求与验收」中的每条编号是否有关联任务或书面验证安排。覆盖缺口只输出提示，验收结果由实际验证和评审确认。
+
+修改已有需求时，追加 `--base <上次确认的提交>` 可对照工作区，逐条查看增删或改写的预期，以及引用它们的当前任务。例如 AC-1 从「缺月留空」改成「缺月填 0」后，评审者能看到上一轮已完成的 T1，决定需要重跑哪个导出样例。
 
 ## 更新工作流
 
