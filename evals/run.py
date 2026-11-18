@@ -77,7 +77,10 @@ def grade_trial(trial):
     files = snapshot(workspace)
     changed = sorted(name for name in files.keys() | metadata["initial_files"].keys()
                      if files.get(name) != metadata["initial_files"].get(name))
-    grader = fingerprint({p.name: p.read_bytes() for p in (Path(__file__).with_name("grade.py"), Path(__file__).with_name("cases.py"))})
+    grader_files = ["grade.py", "cases.py"]
+    if metadata["case"] == "cold-handoff-cli":
+        grader_files.append("cold_handoff.py")
+    grader = fingerprint({name: Path(__file__).with_name(name).read_bytes() for name in grader_files})
     result.update(grader=grader, changed_files=changed, new_design_files=sum(name.startswith("docs/design/") and name not in metadata["initial_files"] for name in files))
     save(trial / "grade.json", result)
     print(json.dumps(result, ensure_ascii=False, indent=2))

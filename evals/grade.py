@@ -13,6 +13,8 @@ from urllib.error import URLError
 from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
+from cold_handoff import check_handoff
+
 
 HTTP_TEST = '''package example;
 import org.junit.jupiter.api.Test;
@@ -136,7 +138,12 @@ def check_java(workspace, mixed):
 
 def grade(workspace, case):
     try:
-        checks, output = check_python(workspace, case == "resume-cli") if case.endswith("cli") else check_java(workspace, case == "gradle-node")
+        if case.endswith("cli"):
+            checks, output = check_python(workspace, case != "python-cli")
+            if case == "cold-handoff-cli":
+                checks.update(check_handoff(workspace, command))
+        else:
+            checks, output = check_java(workspace, case == "gradle-node")
         return {"status": "passed" if all(checks.values()) else "failed", "checks": checks, "output": output}
     except EnvironmentUnavailable as error:
         return {"status": "environment_error", "checks": {}, "output": str(error)}

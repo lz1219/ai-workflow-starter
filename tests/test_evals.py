@@ -50,6 +50,60 @@ class EvalTests(unittest.TestCase):
         path.write_text(path.read_text(encoding="utf-8").replace('    accepted = list({row["name"]: row for row in accepted}.values())\n', ''), encoding="utf-8")
         self.assertEqual(self.call("grade", "--trial", trial).returncode, 1)
 
+    def cold_checks(self, trial, expected_status):
+        result = self.call("grade", "--trial", trial)
+        self.assertEqual(result.returncode, expected_status, result.stdout + result.stderr)
+        return json.loads((trial / "grade.json").read_text(encoding="utf-8"))["checks"]
+
+    def test_cold_handoff_rejects_green_smoke_and_stale_evidence(self):
+        trial = self.prepare("cold-handoff-cli")
+        workspace = trial / "workspace"
+        verification = [sys.executable, "-B", "verify.py"]
+        report = workspace / "evidence/current.json"
+        self.assertEqual(subprocess.run(verification, cwd=workspace, capture_output=True).returncode, 0)
+        self.assertFalse(report.exists())
+        self.assertFalse(self.cold_checks(trial, 1)["dry_run_preserves_existing_file"])
+
+        self.fix(trial)
+        tasks = workspace / "docs/import/tasks.md"
+        tasks.write_text(tasks.read_text(encoding="utf-8").replace(
+            "待办 | AC-2、AC-1 | — | 本工作区需跑完整验证并链接当前回执",
+            "完成 | AC-2、AC-1 | 导入与预演验证通过 | [本次回执](../../evidence/current.json)"),
+            encoding="utf-8")
+        report.parent.mkdir()
+        report.write_bytes((workspace / "docs/import/previous-check.json").read_bytes())
+        checks = self.cold_checks(trial, 1)
+        self.assertTrue(checks["dry_run_preserves_existing_file"])
+        self.assertTrue(checks["original_task_links_current_evidence"])
+        self.assertFalse(checks["current_evidence_matches_checkout"])
+
+        full = subprocess.run([*verification, "--current"], cwd=workspace, capture_output=True)
+        self.assertEqual(full.returncode, 0, full.stderr)
+        self.assertTrue(all(self.cold_checks(trial, 0).values()))
+
+        handoff = tasks.read_text(encoding="utf-8")
+        tasks.write_text(handoff.replace("../../evidence/current.json", "../evidence/current.json"), encoding="utf-8")
+        checks = self.cold_checks(trial, 1)
+        self.assertTrue(checks["current_evidence_matches_checkout"])
+        self.assertFalse(checks["original_task_links_current_evidence"])
+        tasks.write_text(handoff, encoding="utf-8")
+
+        importer = workspace / "importer.py"
+        importer.write_text(importer.read_text(encoding="utf-8") + "\n# Change after verification\n", encoding="utf-8")
+        checks = self.cold_checks(trial, 1)
+        self.assertTrue(checks["dry_run_preserves_existing_file"])
+        self.assertFalse(checks["current_evidence_matches_checkout"])
+
+    def test_cold_handoff_detects_premature_activation_of_future_rule(self):
+        trial = self.prepare("cold-handoff-cli")
+        self.fix(trial)
+        importer = trial / "workspace/importer.py"
+        importer.write_text(importer.read_text(encoding="utf-8").replace(
+            'row["name"]: row', 'row["name"].casefold(): row'), encoding="utf-8")
+        checks = self.cold_checks(trial, 1)
+        self.assertTrue(checks["normal_import_preserves_existing_rules"])
+        self.assertFalse(checks["active_case_sensitive_rule"])
+
     def test_agent_success_claim_is_not_a_passing_outcome(self):
         trial = self.prepare()
         runner = self.root / "runner.json"

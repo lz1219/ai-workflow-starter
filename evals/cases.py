@@ -1,5 +1,7 @@
 """Small, synthetic projects. No private project code or data is used."""
 
+from cold_handoff import fixture as cold_handoff_fixture
+
 CLI = '''import argparse
 import csv
 import json
@@ -92,15 +94,20 @@ def case_files(name):
         "AGENTS.md": "# 项目入口\n\n开发与验证见 [开发说明](docs/development.md)。沿用当前项目结构，保留已有行为。\n",
         "README.md": "# Workflow evaluation fixture\n\nThis is a synthetic project containing an intentionally incomplete behavior.\n",
     }
-    if name in ("python-cli", "resume-cli"):
+    if name in ("python-cli", "resume-cli", "cold-handoff-cli"):
         common.update({"importer.py": CLI, "sample.csv": "name\nAlice\n\"\"\nBob\n",
                        "docs/development.md": "# 开发说明\n\nPython 3.9+ 标准库项目，无需安装依赖。根目录运行 `python importer.py sample.csv output.json`，预演加 `--dry-run`。验证输出和目标文件副作用。\n"})
         prompt = PROMPT_CLI
-        if name == "resume-cli":
+        if name != "python-cli":
             common["importer.py"] = CLI.replace('    Path(args.target).write_text', '    accepted = list({row["name"]: row for row in accepted}.values())\n    Path(args.target).write_text')
+        if name == "resume-cli":
             common["docs/handoff.md"] = "# 当前进度\n\n按 name 去重已实现并验收（保留首次出现的位置，内容以最后一行覆盖），请保留。下一步修复 dry-run 的写文件副作用。不要重复实现去重或删除已有功能。\n"
             common["AGENTS.md"] += "继续工作时先读 [交接](docs/handoff.md)，核对代码实际状态。\n"
             prompt = "继续上次未完成的 importer 工作，按交接记录完成并验证，保留已经交付的去重规则。" + PROMPT_CLI
+        elif name == "cold-handoff-cli":
+            common.update(cold_handoff_fixture())
+            common["AGENTS.md"] += "继续导入工作时，从 [现有任务](docs/import/tasks.md) 进入。\n"
+            prompt = "从这个新工作区接手导入功能的未完任务。按现行规则完成并实际验证，在原任务中回写当前结果与证据。"
     elif name in ("maven-spring", "gradle-node"):
         prefix = "backend/" if name == "gradle-node" else ""
         common[prefix + "src/main/java/example/OrdersApplication.java"] = JAVA
@@ -124,4 +131,4 @@ def case_files(name):
     return common, prompt
 
 
-CASES = ("python-cli", "resume-cli", "maven-spring", "gradle-node")
+CASES = ("python-cli", "resume-cli", "cold-handoff-cli", "maven-spring", "gradle-node")
