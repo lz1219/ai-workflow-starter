@@ -176,16 +176,18 @@ def review_coverage(criteria, verification, tasks):
     ]
 
 
-def review_changes(design, base, current):
+def review_changes(project, design, base, current):
     def git(*args):
-        result = subprocess.run(["git", "-C", str(design.parent), *args], capture_output=True)
+        result = subprocess.run(["git", "-C", str(project), *args], capture_output=True)
         if result.returncode:
             raise ValueError(result.stderr.decode("utf-8", errors="replace").strip() or "无法读取 Git 基准")
         return result.stdout
 
     revision = git("rev-parse", "--verify", "--end-of-options", base + "^{commit}").decode().strip()
-    # ls-tree resolves this path relative to the requirement's directory.
-    entry = git("ls-tree", "-z", revision, "--", design.name)
+    entry = git("ls-tree", "-z", revision, "--", design.relative_to(project).as_posix())
+    if not entry and git("rev-parse", "--show-prefix").rstrip(b"\r\n"):
+        if not git("ls-files", "-z", "--", "."):
+            raise ValueError("外层仓库未跟踪该项目的文件，无法使用该 Git 基准。请去掉 --base 检查验收覆盖。")
     previous = {}
     if entry:
         object_id = entry.split(b"\t", 1)[0].split()[2].decode()
@@ -377,7 +379,7 @@ def main():
             current = read_design(design, review=True)
             warnings = current["coverage_warnings"]
             if args.base is not None:
-                revision, changes = review_changes(design, args.base, current)
+                revision, changes = review_changes(project, design, args.base, current)
                 print(f"{args.review}: 对比 {revision[:12]} 与工作区")
                 for change in changes:
                     print(change)

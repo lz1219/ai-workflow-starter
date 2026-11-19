@@ -233,6 +233,36 @@ class RequirementsTests(unittest.TestCase):
         self.assertEqual(self.run_board(self.project, "--write").returncode, 0)
         self.assertIn("上游提供样本后验收", self.board.read_text(encoding="utf-8"))
 
+    def test_base_review_requires_tracked_project_files_when_using_an_outer_repository(self):
+        self.project = self.project / "snapshot"
+        self.design_root = self.project / "docs/design"
+        requirement = self.create_requirement()
+        repo = self.project.parent
+        (repo / "README.md").write_text("Outer repository\n", encoding="utf-8")
+
+        def git(*args):
+            subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+        git("init", "-q")
+        git("add", "README.md")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "-qm", "outer baseline")
+        review = ("--review", requirement.name)
+        comparison = (*review, "--base", "HEAD")
+
+        snapshot = self.run_board(self.project, *comparison)
+        self.assertEqual(snapshot.returncode, 1, snapshot.stdout)
+        self.assertIn("外层仓库未跟踪该项目的文件", snapshot.stderr)
+        self.assertEqual(self.run_board(self.project, *review).returncode, 0)
+
+        (self.project / "README.md").write_text("Nested project\n", encoding="utf-8")
+        git("add", "snapshot/README.md")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "-qm", "track nested project")
+        new_design = self.run_board(self.project, *comparison)
+        self.assertEqual(new_design.returncode, 0, new_design.stderr)
+        self.assertIn("AC-1: （基准无此项）", new_design.stdout)
+
     def test_base_review_shows_changed_expectation_and_completed_task_in_nested_project(self):
         self.project = self.project / "子项目"
         self.design_root = self.project / "docs/design"
