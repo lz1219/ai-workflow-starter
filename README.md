@@ -39,14 +39,14 @@ python <上游副本>/skills/project-onboard/scripts/workflow_update.py --doctor
 
 ## 两条路径
 
-- **创建 Spring 项目**：确定技术选择，按需借鉴用户提供的参考项目，生成构建配置、应用入口和基础测试，使用环境提供的 Maven 或 Gradle 验证。新项目无需 Wrapper。
+- **创建 Spring 项目**：确定技术选择，按需借鉴用户提供的参考项目，生成构建配置、应用入口和基础测试，按团队确认的入口验证，例如仓库的 Gradle Wrapper 或团队统一安装的 Maven。
 - **接入已有项目**：根据构建清单、锁文件和 CI 确认工程边界，沿目标模块的一条真实链路核对行为和验证。把日常使用的结论写入既有开发文档，简单项目可直接写进根 `AGENTS.md`。只有冲突、未决事项或分批接入需要持续跟踪时，才长期保留接入摘要。见 [接入探查与交付](skills/project-onboard/references/onboarding.md)。
 
 首版规范区分已有约束、观察到的习惯和建议的默认做法。影响设计方向的缺口先讨论，局部可逆的建议可随首个需求设计一起审查。已有适用的规范或技术决定就直接引用。见[第一版规范的形成与修订](skills/project-onboard/references/base-standards.md#第一版规范的形成与修订)。
 
 基础开发规范和 Java / Spring、Python、Node 的探查参考随接入 Skill 分发。接入方案见 [设计说明](DESIGN.md)。
 
-Maven 项目可从 Skill 目录运行 `python scripts/maven_preflight.py --project <项目根目录> --java-version 17`，核对实际 JDK。可加 `--verify` 运行完整构建，或在 `--` 后传入项目自己的 Maven 参数。例如 `-- -B -Dtest=ExampleTest test` 可在选定的 JDK 下运行指定测试。
+采用仓库 Maven Wrapper（若存在）或 PATH 中 Maven 的项目，可从 Skill 目录运行 `python scripts/maven_preflight.py --project <项目根目录> --java-version 17`，核对实际 JDK。可加 `--verify` 运行完整构建，或在 `--` 后传入项目自己的 Maven 参数。例如 `-- -B -Dtest=ExampleTest test` 可在选定的 JDK 下运行指定测试。
 
 ## 从需求到实现
 
