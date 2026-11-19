@@ -92,3 +92,5 @@ AI 任务效果使用 [真实任务评测](evals/README.md)，提供 Python CLI�
 设计深度、图示选择与续做行为另用 [设计工作流评审场景](evals/design-review.md) 检查，评审实际产物和过程，不用标题或图的数量代替质量。
 
 在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、编号与引用校验、Markdown 格式容忍、验收安排提示，以及 Maven 参数和 JDK 环境的传递。更新工具使用隔离 Git 仓库验证预览、定制保留、冲突、回退和中断恢复。运行测试需要 Python 和 Git，无需访问网络。
+
+面向 `main` 的 PR 会自动在 Ubuntu 24.04 / Python 3.9 和 Windows Server 2025 / Python 3.13 上运行同一套测试。[PR 回归配置](.github/workflows/pr-regression.yml)
