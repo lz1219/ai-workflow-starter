@@ -273,8 +273,8 @@ class RequirementsTests(unittest.TestCase):
 
         result = self.run_board(self.project, "--check")
         self.assertEqual(result.returncode, 1, result.stderr)
-        self.assertIn(str(first / "tasks.md"), result.stderr)
-        self.assertIn(str(second / "tasks.md"), result.stderr)
+        self.assertIn(str((first / "tasks.md").resolve()), result.stderr)
+        self.assertIn(str((second / "tasks.md").resolve()), result.stderr)
         self.assertIn("状态无效", result.stderr)
         self.assertIn("未知验收项：AC-404", result.stderr)
         self.assertFalse(self.board.exists())
