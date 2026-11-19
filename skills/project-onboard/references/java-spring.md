@@ -15,7 +15,7 @@
 | 应用入口、功能模块和测试 | 包结构、模块职责、公共约定、测试布局和小范围实现模式。 |
 | 开发文档和配置示例 | 团队命名、错误处理、验证命令和环境约定。目标项目重新配置命名、环境地址和凭据来源。 |
 
-报告参考路径及采用的做法。新工程独立生成，凭据、生产地址、业务数据、项目专属代码和 Wrapper 不作为初始化输入。若参考目录不可读，说明缺口并根据已知要求继续做可确定的部分。
+报告参考路径及采用的做法。新工程独立生成，凭据、生产地址、业务数据、项目专属代码留在参考项目。需要 Wrapper 时，按目标项目确认的工具版本和分发源生成。若参考目录不可读，说明缺口并根据已知要求继续做可确定的部分。
 
 ## Java / Spring 开发要点
 
@@ -26,14 +26,14 @@
 
 ## 验证命令示例
 
-从零项目使用环境提供的工具。Maven 可从 `mvn test`、`mvn verify` 开始，Gradle 可从 `gradle test`、`gradle check` 开始。已有项目优先用原来的入口，包括它已经配置的 Wrapper。多模块项目核对工作目录、模块参数和任务依赖。实际使用前确认构建配置绑定了对应测试与检查。
+按目标项目已确认的入口运行。在 Windows 上，例如用仓库的 `gradlew.bat check` 或 `mvnw.cmd verify`；若项目约定系统工具，则用 `gradle check` 或 `mvn verify`。新项目缺少约定时，把可复现性和团队工具配置纳入首版建议。多模块项目核对工作目录、模块参数和任务依赖。实际使用前确认构建配置绑定了对应测试与检查。
 
-Maven 先核对 `mvn -version` 中的 Java 版本。Shell 的 `java -version` 和 IDE 的项目 JDK 可能与 Maven 不同。需要切换时只在本次验证进程设置 `JAVA_HOME` 与 `PATH`，再确认 Maven 实际使用了目标版本。可用 [Maven 预检脚本](../scripts/maven_preflight.py)完成检查，按需用 `--java-home` 指定已安装的 JDK，再用 `--verify` 跑完整构建，或在 `--` 后传入项目的 Maven 参数。
+Maven 从所选入口运行 `-version` 核对 Java 版本。Shell 的 `java -version` 和 IDE 的项目 JDK 可能与 Maven 不同。需要切换时只在本次验证进程设置 `JAVA_HOME` 与 `PATH`，再确认 Maven 实际使用了目标版本。[Maven 预检脚本](../scripts/maven_preflight.py)优先选择项目根目录的 Wrapper，其次使用 PATH 中的 Maven。该选择与项目约定一致时可用它完成检查，按需用 `--java-home` 指定已安装的 JDK，再用 `--verify` 跑完整构建，或在 `--` 后传入项目的 Maven 参数。
 
 核对 Maven profile 和 CI 参数是否跳过测试。若有效配置使用 `maven.test.skip=true`，如需执行回归，在验证命令显式开启测试。在 PowerShell 中把含点的 `-D` 参数整体放在引号里，例如 `mvn "-Dmaven.test.skip=false" verify`。从测试输出或 Surefire/Failsafe 报告确认对应测试实际执行、数量和结果。离线模式下遇到依赖或测试运行器的缓存缺失、仓库来源不匹配时，按项目既有 Maven 仓库设置解析依赖，再复跑相同检查。
 
-Gradle 从项目实际入口运行 `--version`，核对启动及构建进程使用的 JDK，并从构建文件确认 Java toolchain 和实际测试任务。跨子项目时记录根目录、模块路径和任务，例如根目录下运行 `gradlew.bat :backend:check`。已有 Wrapper 时复用。新建 Spring 项目交付使用环境提供的 `mvn` 或 `gradle`，采用生成器时在交付前检查 Wrapper 文件和目录。
+Gradle 从项目实际入口运行 `--version`，核对启动及构建进程使用的 JDK，并从构建文件确认 Java toolchain 和实际测试任务。跨子项目时记录根目录、模块路径和任务，例如根目录下运行 `gradlew.bat :backend:check`。
 
-项目入口记录 JDK、构建工具、执行目录和经过验证的命令。另记测试报告、启动探测结果和缺失的环境。CI 调用项目构建入口，所需 JDK 和构建工具版本由 CI 环境提供。
+项目入口记录 JDK、构建工具、执行目录和经过验证的命令。另记测试报告、启动探测结果和缺失的环境。核对 CI 实际使用同一入口及对应的 JDK 和构建工具版本。
 
 参考 [Maven 构建生命周期](https://maven.apache.org/guides/introduction/introduction-to-the-lifecycle.html) 和 [Spring Boot 测试](https://docs.spring.io/spring-boot/reference/testing/index.html)。查框架行为时以项目使用的版本为准。

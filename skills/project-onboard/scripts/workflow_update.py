@@ -218,6 +218,13 @@ def git(source, *args):
     return result.stdout
 
 
+def upstream_key(url):
+    """Allow the optional clone suffix on ordinary GitHub HTTPS repository URLs."""
+    if re.fullmatch(r"https://github\.com/[A-Za-z0-9-]+/[A-Za-z0-9._-]+", url):
+        return url.removesuffix(".git")
+    return url
+
+
 def source_files(source, revision, name):
     prefix = f"skills/{name}/"
     files = {}
@@ -379,7 +386,7 @@ def run(args):
     manifest = json.loads(before_manifest) if before_manifest else {
         "version": 1, "upstream": origin, "skills": {}, "checks": []}
     validate_manifest(project, manifest)
-    if manifest["upstream"] != origin:
+    if upstream_key(manifest["upstream"]) != upstream_key(origin):
         raise ValueError("Source remote does not match the registered upstream")
     if args.install:
         if len(set(args.install)) != len(args.install) or (args.target and len(args.install) != 1):

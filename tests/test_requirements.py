@@ -171,3 +171,124 @@ class RequirementsTests(unittest.TestCase):
         reviewed = self.run_board(self.project, "--review", requirement.name)
         self.assertEqual(reviewed.returncode, 0, reviewed.stderr)
         self.assertIn("不代表验收通过", reviewed.stdout)
+
+    def test_team_index_is_preserved_until_a_region_is_selected(self):
+        self.create_requirement()
+        start = b"<!-- ai-workflow:board -->"
+        end = b"<!-- /ai-workflow:board -->"
+        prefix = b"\xef\xbb\xbf# Team index\r\n\r\n```md\r\n" + start + b"\r\n" + end + b"\r\n```\r\n"
+        suffix = b"\r\n## Release notes\r\nKeep this note."
+        for markers in (b"", start, end, end + b"\r\n" + start, start + b"\r\n" + start + b"\r\n" + end):
+            with self.subTest(markers=markers):
+                original = prefix + markers + suffix
+                self.board.write_bytes(original)
+                result = self.run_board(self.project, "--write")
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertEqual(self.board.read_bytes(), original)
+        self.board.write_bytes(prefix + start + b"\r\n" + end + suffix)
+        self.assertEqual(self.run_board(self.project, "--check").returncode, 1)
+        self.assertEqual(self.run_board(self.project, "--write").returncode, 0)
+        generated = self.board.read_bytes()
+        self.assertTrue(generated.startswith(prefix + start + b"\r\n"))
+        self.assertTrue(generated.endswith(end + suffix))
+        self.assertIn(b"Req-example/design.md", generated)
+        self.assertNotIn(b"\n", generated.replace(b"\r\n", b""))
+        self.assertEqual(self.run_board(self.project, "--check").returncode, 0)
+        self.assertEqual(self.run_board(self.project, "--write").returncode, 0)
+        self.assertEqual(self.board.read_bytes(), generated)
+
+    def test_legacy_board_refreshes_but_mixed_legacy_index_requires_opt_in(self):
+        self.create_requirement()
+        preview = self.run_board(self.project)
+        self.assertEqual(preview.returncode, 0, preview.stderr)
+        legacy = preview.stdout
+        self.board.write_text(legacy, encoding="utf-8")
+        self.assertEqual(self.run_board(self.project, "--check").returncode, 0)
+        extra = legacy + "\n## Release notes\nHandwritten\n"
+        self.board.write_text(extra, encoding="utf-8")
+        self.assertEqual(self.run_board(self.project, "--write").returncode, 1)
+        self.assertEqual(self.board.read_text(encoding="utf-8"), extra)
+        self.board.write_text(legacy.replace("待办 1", "待办 2"), encoding="utf-8")
+        self.assertEqual(self.run_board(self.project, "--check").returncode, 1)
+        self.assertEqual(self.run_board(self.project, "--write").returncode, 0)
+        self.assertIn("<!-- ai-workflow:board -->", self.board.read_text(encoding="utf-8"))
+        self.assertIn("待办 1", self.board.read_text(encoding="utf-8"))
+
+    def test_detached_blocked_task_is_reported_before_board_is_replaced(self):
+        requirement = self.create_requirement()
+        tasks = requirement / "tasks.md"
+        original = tasks.read_text(encoding="utf-8")
+        self.assertEqual(self.run_board(self.project, "--write").returncode, 0)
+        before = self.board.read_bytes()
+        blocked = "| T2 | 等待样本 | 阻塞 | AC-1 | — | 上游提供样本后验收 |"
+        for location in ("before", "after"):
+            with self.subTest(location=location):
+                detached = blocked + "\n\n" + original if location == "before" else original + "\n" + blocked
+                tasks.write_text(detached, encoding="utf-8")
+                result = self.run_board(self.project, "--write")
+                self.assertEqual(result.returncode, 1)
+                self.assertIn("T2 位于标准任务表之外", result.stderr)
+                self.assertEqual(self.board.read_bytes(), before)
+        tasks.write_text(original.replace("| — | — |\n", "| — | — |\n" + blocked + "\n"), encoding="utf-8")
+        self.assertEqual(self.run_board(self.project, "--write").returncode, 0)
+        self.assertIn("上游提供样本后验收", self.board.read_text(encoding="utf-8"))
+
+    def test_base_review_requires_tracked_project_files_when_using_an_outer_repository(self):
+        self.project = self.project / "snapshot"
+        self.design_root = self.project / "docs/design"
+        requirement = self.create_requirement()
+        repo = self.project.parent
+        (repo / "README.md").write_text("Outer repository\n", encoding="utf-8")
+
+        def git(*args):
+            subprocess.run(["git", "-C", str(repo), *args], check=True, capture_output=True)
+
+        git("init", "-q")
+        git("add", "README.md")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "-qm", "outer baseline")
+        review = ("--review", requirement.name)
+        comparison = (*review, "--base", "HEAD")
+
+        snapshot = self.run_board(self.project, *comparison)
+        self.assertEqual(snapshot.returncode, 1, snapshot.stdout)
+        self.assertIn("外层仓库未跟踪该项目的文件", snapshot.stderr)
+        self.assertEqual(self.run_board(self.project, *review).returncode, 0)
+
+        (self.project / "README.md").write_text("Nested project\n", encoding="utf-8")
+        git("add", "snapshot/README.md")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "-qm", "track nested project")
+        new_design = self.run_board(self.project, *comparison)
+        self.assertEqual(new_design.returncode, 0, new_design.stderr)
+        self.assertIn("AC-1: （基准无此项）", new_design.stdout)
+
+    def test_base_review_shows_changed_expectation_and_completed_task_in_nested_project(self):
+        self.project = self.project / "子项目"
+        self.design_root = self.project / "docs/design"
+        requirement = self.create_requirement("| AC-2 | old | retired |\n")
+        design = requirement / "design.md"
+        tasks = requirement / "tasks.md"
+        tasks.write_text(tasks.read_text(encoding="utf-8").replace(
+            "待办 | AC-1 | — | —", "完成 | AC-1 | 生成文件 | 二月为空"), encoding="utf-8")
+        def git(*args):
+            subprocess.run(["git", "-C", str(self.project.parent), *args], check=True, capture_output=True)
+        git("init", "-q")
+        git("add", ".")
+        git("-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+            "-c", "commit.gpgsign=false", "commit", "-qm", "baseline")
+        options = ("--review", requirement.name, "--base", "HEAD")
+        first = self.run_board(self.project, *options)
+        self.assertEqual(first.returncode, 0, first.stderr)
+        self.assertIn("条目无变化", first.stdout)
+        design.write_text(design.read_text(encoding="utf-8").replace(
+            "input | output", "input | fill zero").replace("AC-2 | old | retired", "AC-3 | new | added"),
+            encoding="utf-8")
+        review = self.run_board(self.project, *options)
+        self.assertEqual(review.returncode, 0, review.stderr)
+        self.assertIn("AC-1: input / output → input / fill zero。当前关联任务：T1（完成）", review.stdout)
+        self.assertIn("AC-2: old / retired → （当前无此项）", review.stdout)
+        self.assertIn("AC-3: （基准无此项） → new / added", review.stdout)
+        self.assertFalse((self.design_root / "README.md").exists())
+        self.assertNotEqual(self.run_board(self.project, "--review", requirement.name,
+                                          "--base", "missing-revision").returncode, 0)
