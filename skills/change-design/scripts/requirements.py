@@ -16,7 +16,7 @@ from urllib.parse import quote
 
 RELATIONS = ("depends_on", "follows", "related")
 TASK_HEADER = "| 编号 | 计划任务 | 状态 | 验收项 | 实际完成内容 | 证据或交接 |"
-TASK_STATES = {"待办", "进行中", "阻塞", "完成", "取消"}
+TASK_STATES = ("待办", "进行中", "阻塞", "完成", "取消")
 EMPTY_CELLS = {"", "—", "-"}
 ACCEPTANCE_SECTION = re.compile(r"^##\s+(?:\d+\.\s*)?需求与验收\s*$")
 VERIFICATION_PLACEHOLDERS = EMPTY_CELLS | {"测试、命令或手工步骤", "实现后填写"}
@@ -120,39 +120,83 @@ def read_design(path, *, review=False):
 def read_tasks(path, acceptance_ids):
     if not path.is_file():
         return None
-    lines = list(visible_lines(path.read_text(encoding="utf-8-sig").splitlines()))
-    headers = [i for i, line in enumerate(lines) if table_cells(line) == table_cells(TASK_HEADER)]
-    if len(headers) != 1:
-        raise ValueError(f"{path}: 应包含一份标准任务表")
-    table = lines[headers[0] + 1:]
-    separators = table_cells(table[0]) if table else None
-    if not separators or len(separators) != 6 or any(not re.fullmatch(r":?-{3,}:?", cell) for cell in separators):
-        raise ValueError(f"{path}: 缺少任务表分隔行")
+    rows = [table_cells(line) for line in visible_lines(path.read_text(encoding="utf-8-sig").splitlines())]
+    header = table_cells(TASK_HEADER)
+    headers = [index for index, cells in enumerate(rows) if cells == header]
+    if not headers:
+        raise ValueError(f"{path}: 应包含一份标准任务表。请使用表头 {TASK_HEADER}")
+
+    errors = []
+
+    def report(index, message):
+        errors.append((index, message))
+
+    def is_separator(cells):
+        return cells is not None and len(cells) == 6 and all(
+            re.fullmatch(r":?-{3,}:?", cell) for cell in cells
+        )
+
+    table_rows = set()
+    for start in headers:
+        if start != headers[0]:
+            report(
+                start,
+                f"应包含一份标准任务表。把此表的任务并入第 {headers[0] + 1} 行开始的任务表，"
+                "删除重复表头和分隔行，确保任务行连续排列",
+            )
+        separator = rows[start + 1] if start + 1 < len(rows) else None
+        first_row = start + 2
+        if not is_separator(separator):
+            if first_row < len(rows) and is_separator(rows[first_row]):
+                report(first_row, "分隔行须紧跟表头，请移除两行之间的空行或其他内容")
+                first_row += 1
+            else:
+                report(start, "缺少任务表分隔行。表头下一行填写六列分隔符，如 |---|---|---|---|---|---|")
+                if separator and re.fullmatch(r"T[1-9]\d*", separator[0]):
+                    first_row -= 1
+        for index in range(first_row, len(rows)):
+            if rows[index] is None or rows[index] == header:
+                break
+            table_rows.add(index)
 
     tasks = []
     seen = set()
-    end = next((i for i in range(1, len(table)) if not table[i].startswith("|")), len(table))
-    for line in [*lines[:headers[0]], *table[end:]]:
-        cells = table_cells(line)
-        if cells and re.fullmatch(r"T[1-9]\d*", cells[0]):
-            raise ValueError(f"{path}: {cells[0]} 位于标准任务表之外，请移回表内并移除行间空行")
-    for line in table[1:end]:
-        cells = table_cells(line)
+    for index, cells in enumerate(rows):
+        if index not in table_rows:
+            if not cells or not re.fullmatch(r"T[1-9]\d*", cells[0]):
+                continue
+            report(index, f"{cells[0]} 位于标准任务表之外，请移回表内并移除行间空行")
+            if len(cells) != 6:
+                continue
         if len(cells) != 6:
-            raise ValueError(f"{path}: 任务行应包含六列")
+            report(index, "任务行应包含六列，请按表头对齐")
+            continue
+        if is_separator(cells):
+            report(index, "分隔行须紧跟表头，请移除错位或重复的分隔行")
+            continue
         task_id, plan, status, acceptance, result, evidence = cells
-        if not re.fullmatch(r"T[1-9]\d*", task_id) or task_id in seen or plan in EMPTY_CELLS:
-            raise ValueError(f"{path}: 无效、重复或缺少计划的任务 {task_id!r}")
-        seen.add(task_id)
+        if not re.fullmatch(r"T[1-9]\d*", task_id):
+            report(index, f"任务编号无效：{task_id!r}。请采用 T1、T2 等格式")
+        elif task_id in seen:
+            report(index, f"重复任务编号：{task_id}。每个任务编号只应使用一次")
+        else:
+            seen.add(task_id)
+        if plan in EMPTY_CELLS:
+            report(index, f"{task_id} 缺少计划，请填写要交付的结果")
         if status not in TASK_STATES:
-            raise ValueError(f"{path}: {task_id} 的状态无效：{status!r}")
+            report(index, f"{task_id} 的状态无效：{status!r}。状态栏只填{'、'.join(TASK_STATES)}之一")
         references = set(re.split(r"[、,，]\s*", acceptance)) if acceptance not in EMPTY_CELLS else set()
-        if references - acceptance_ids:
-            raise ValueError(f"{path}: {task_id} 引用了未知验收项：{', '.join(sorted(references - acceptance_ids))}")
+        malformed = {ref for ref in references if not re.fullmatch(r"AC-\d+", ref)}
+        if malformed:
+            invalid = "、".join(repr(ref) for ref in sorted(malformed))
+            report(index, f"{task_id} 的验收项格式无效：{invalid}。逐项填写设计中的编号，如 AC-1、AC-2，回归说明写入实际完成内容或证据栏")
+        unknown = references - malformed - acceptance_ids
+        if unknown:
+            report(index, f"{task_id} 引用了未知验收项：{'、'.join(sorted(unknown))}。请核对 design.md 中的已定义编号")
         if status == "完成" and (result in EMPTY_CELLS or evidence in EMPTY_CELLS):
-            raise ValueError(f"{path}: {task_id} 完成时须记录实际内容和证据")
+            report(index, f"{task_id} 完成时须记录实际内容和证据")
         if status == "阻塞" and evidence in EMPTY_CELLS:
-            raise ValueError(f"{path}: {task_id} 阻塞时须记录原因或恢复条件")
+            report(index, f"{task_id} 阻塞时须记录原因或恢复条件")
         tasks.append({
             "id": task_id,
             "plan": plan,
@@ -161,6 +205,9 @@ def read_tasks(path, acceptance_ids):
             "result": result,
             "evidence": evidence,
         })
+    if errors:
+        by_line = sorted(errors, key=lambda error: error[0])
+        raise ValueError("\n".join(f"{path}:{index + 1}: {message}" for index, message in by_line))
     return tasks
 
 
@@ -205,7 +252,15 @@ def review_changes(project, design, base, current):
 
 
 def load_designs(root):
-    designs = {path.parent.name: read_design(path) for path in sorted(root.glob("*/design.md"))}
+    designs = {}
+    errors = []
+    for path in sorted(root.glob("*/design.md")):
+        try:
+            designs[path.parent.name] = read_design(path)
+        except (ValueError, OSError) as error:
+            errors.append(str(error))
+    if errors:
+        raise ValueError("\n".join(errors))
     for name, metadata in designs.items():
         for field in RELATIONS:
             for reference in metadata[field]:

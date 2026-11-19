@@ -233,6 +233,66 @@ class RequirementsTests(unittest.TestCase):
         self.assertEqual(self.run_board(self.project, "--write").returncode, 0)
         self.assertIn("上游提供样本后验收", self.board.read_text(encoding="utf-8"))
 
+    def test_checks_report_table_and_independent_row_errors_without_writing(self):
+        requirement = self.create_requirement("| AC-2 | another input | another output |\n")
+        tasks = requirement / "tasks.md"
+        original = tasks.read_text(encoding="utf-8")
+        self.assertEqual(self.run_board(self.project, "--write").returncode, 0)
+        board_before = self.board.read_bytes()
+        header = next(line for line in original.splitlines() if line.startswith("| 编号"))
+        broken = original + (
+            f"\n{header}\n|---|---|---|---|---|---|\n"
+            "| T2 | 复验 | 完成（按回执覆盖范围） | AC-1、回归 AC-1 至 AC-2 | 已复验 | 浏览器报告 |\n"
+            "\n| T3 | 等待真实数据 | 阻塞 | AC-404 | — | — |\n"
+        )
+        tasks.write_text(broken, encoding="utf-8")
+        task_before = tasks.read_bytes()
+        row_number = next(i for i, line in enumerate(broken.splitlines(), 1) if line.startswith("| T2"))
+
+        for mode in (("--check",), ("--write",), ("--review", requirement.name)):
+            with self.subTest(mode=mode):
+                result = self.run_board(self.project, *mode)
+                self.assertEqual(result.returncode, 1, result.stderr)
+                self.assertIn(f"tasks.md:{row_number}: T2 的状态无效", result.stderr)
+                self.assertIn("T2 的验收项格式无效", result.stderr)
+                self.assertIn("应包含一份标准任务表", result.stderr)
+                self.assertIn("T3 位于标准任务表之外", result.stderr)
+                self.assertIn("T3 引用了未知验收项：AC-404", result.stderr)
+                self.assertIn("T3 阻塞时须记录", result.stderr)
+                self.assertEqual(self.board.read_bytes(), board_before)
+                self.assertEqual(tasks.read_bytes(), task_before)
+
+    def test_check_reports_errors_in_independent_requirements(self):
+        first = self.create_requirement()
+        second = self.design_root / "Req-second"
+        second.mkdir()
+        (second / "design.md").write_bytes((first / "design.md").read_bytes())
+        template = (first / "tasks.md").read_text(encoding="utf-8")
+        (first / "tasks.md").write_text(template.replace("待办 | AC-1", "待办（待安排） | AC-1"), encoding="utf-8")
+        (second / "tasks.md").write_text(template.replace("| AC-1 |", "| AC-404 |"), encoding="utf-8")
+
+        result = self.run_board(self.project, "--check")
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn(str(first / "tasks.md"), result.stderr)
+        self.assertIn(str(second / "tasks.md"), result.stderr)
+        self.assertIn("状态无效", result.stderr)
+        self.assertIn("未知验收项：AC-404", result.stderr)
+        self.assertFalse(self.board.exists())
+
+    def test_misplaced_separator_is_reported_as_table_syntax(self):
+        requirement = self.create_requirement()
+        tasks = requirement / "tasks.md"
+        original = tasks.read_text(encoding="utf-8")
+        tasks.write_text(original.replace("|---|---|---|---|---|---|", "\n|---|---|---|---|---|---|"),
+                         encoding="utf-8")
+
+        result = self.run_board(self.project, "--review", requirement.name)
+        self.assertEqual(result.returncode, 1, result.stderr)
+        self.assertIn("分隔行须紧跟表头", result.stderr)
+        self.assertNotIn("缺少任务表分隔行", result.stderr)
+        self.assertNotIn("任务编号无效", result.stderr)
+        self.assertNotIn("状态无效", result.stderr)
+
     def test_base_review_requires_tracked_project_files_when_using_an_outer_repository(self):
         self.project = self.project / "snapshot"
         self.design_root = self.project / "docs/design"
