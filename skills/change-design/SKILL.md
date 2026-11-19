@@ -1,6 +1,6 @@
 ---
 name: change-design
-description: Design feature or behavior changes and carry them through verifiable implementation increments. Use for requirements clarification, technical design or review, implementation from an existing design, resuming tracked work, and acceptance verification across applications, libraries, CLI tools, and data jobs.
+description: Turn informal feature requests and changes of direction into agreed behavior, design decisions, and verifiable implementation. Use when clarifying a requirement with its owner, comparing options, reviewing or revising a design, implementing agreed work, resuming a task, or verifying delivery.
 ---
 
 # 需求设计与增量交付
