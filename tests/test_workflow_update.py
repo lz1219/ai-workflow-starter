@@ -176,6 +176,26 @@ class WorkflowUpdateTests(unittest.TestCase):
         self.assertIn("validation commands", result.stderr)
         self.assertEqual(self.snapshot(), before)
 
+    def test_github_https_clone_suffix_preserves_registered_identity(self):
+        self.upgrade()
+        repo_url = "https://github.com/example/workflow"
+        for registered, remote in [(repo_url, repo_url + ".git"), (repo_url + ".git", repo_url)]:
+            with self.subTest(registered=registered):
+                manifest = self.manifest()
+                manifest["upstream"] = registered
+                (self.project / updater.MANIFEST).write_bytes(updater.json_bytes(manifest))
+                self.git("remote", "set-url", "origin", remote)
+                before = self.snapshot()
+                preview = self.run_update()
+                self.assertEqual(preview.returncode, 0, preview.stderr)
+                self.assertEqual(self.snapshot(), before)
+        for other in ("https://github.com/another/workflow.git", repo_url + "-fork.git"):
+            self.git("remote", "set-url", "origin", other)
+            refused = self.run_update("--apply")
+            self.assertEqual(refused.returncode, 1)
+            self.assertIn("does not match", refused.stderr)
+            self.assertEqual(self.snapshot(), before)
+
     def test_wrong_source_and_local_addition_collision_are_rejected(self):
         self.upgrade()
         self.git("remote", "set-url", "origin", "https://example.invalid/other.git")
