@@ -229,12 +229,232 @@ if __name__ == "__main__":
 PROMPT_DESIGN_REVIEW = "评审 docs/design/Req-20251120-事件关闭通知/design.md：核对业务规则、时序、数据定义、验收与现有实现是否一致，说明发现的影响和需要决策的地方。只做评审，不直接实施任何代码改动。"
 
 
+CLAIM = {
+    "AGENTS.md": "# 项目入口\n\n开发与验证见 [开发说明](docs/development.md)。当前任务与验收见 [任务](docs/tasks.md)。\n",
+    "README.md": "# 记录导入工具\n\n把 CSV 里有效的名单导入成 JSON。\n",
+    "docs/development.md": """# 开发说明
+
+Python 3.9+ 标准库项目，无需安装依赖，从根目录运行。
+
+- `python check.py`：快速检查导入与预演打印的计数。
+- `python verify.py --full`：完整验收，按 [任务](tasks.md) 中列出的验收项检查行为。
+""",
+    "docs/tasks.md": """# 任务
+
+| 编号 | 计划任务 | 状态 | 验收项 | 实际完成内容 | 证据或交接 |
+| --- | --- | --- | --- | --- | --- |
+| T1 | 修复预演的写文件副作用 | 待办 | AC-1、AC-2 | — | — |
+
+## 需求与验收
+
+AC-1　普通导入与预演打印相同的 accepted/rejected 计数：样例 `sample.csv` 为 accepted=2、rejected=1。
+
+AC-2　预演不得创建、改写或截断目标文件，也不得创建目标文件的父目录；普通导入仍写出有效记录。
+""",
+    "importer.py": '''import argparse
+import csv
+import json
+from pathlib import Path
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source")
+    parser.add_argument("target")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    rows = list(csv.DictReader(Path(args.source).open(encoding="utf-8", newline="")))
+    accepted = [row for row in rows if row.get("name", "").strip()]
+    accepted = list({row["name"]: row for row in accepted}.values())
+    Path(args.target).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")
+    print(json.dumps({"accepted": len(accepted), "rejected": len(rows) - len(accepted)}))
+
+
+if __name__ == "__main__":
+    main()
+''',
+    "sample.csv": "name,email\nAlice,first\n\"\",blank\nBob,b\n",
+    "check.py": '''"""Fast check: counts only. See verify.py --full for acceptance."""
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+root = Path(__file__).resolve().parent
+with tempfile.TemporaryDirectory() as directory:
+    target = Path(directory) / "out.json"
+    result = subprocess.run([sys.executable, "-B", str(root / "importer.py"), str(root / "sample.csv"), str(target), "--dry-run"],
+                            capture_output=True, text=True)
+    counts = json.loads(result.stdout) if result.stdout.strip() else None
+    ok = result.returncode == 0 and counts == {"accepted": 2, "rejected": 1}
+print("OK" if ok else "FAILED")
+raise SystemExit(0 if ok else 1)
+''',
+    "verify.py": '''"""Full acceptance: counts plus preview side effects."""
+import argparse
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+root = Path(__file__).resolve().parent
+parser = argparse.ArgumentParser()
+parser.add_argument("--full", action="store_true")
+args = parser.parse_args()
+if not args.full:
+    print("Use --full for acceptance.")
+    raise SystemExit(0)
+
+checks = {}
+with tempfile.TemporaryDirectory() as directory:
+    folder = Path(directory)
+    source = folder / "input.csv"
+    source.write_text("name,email\\nAlice,old\\n\\"\\",blank\\nBob,b\\nAlice,new\\n", encoding="utf-8")
+    base = [sys.executable, "-B", str(root / "importer.py"), str(source)]
+    counts = {"accepted": 2, "rejected": 2}
+
+    missing = folder / "missing" / "out.json"
+    result = subprocess.run([*base, str(missing), "--dry-run"], capture_output=True, text=True)
+    checks["ac1_counts"] = result.returncode == 0 and json.loads(result.stdout) == counts
+    checks["ac2_no_parent"] = not missing.parent.exists()
+    checks["ac2_no_file"] = not missing.exists()
+
+    existing = folder / "existing.json"
+    existing.write_bytes(b"keep these bytes")
+    result = subprocess.run([*base, str(existing), "--dry-run"], capture_output=True, text=True)
+    checks["ac2_preserves_existing"] = existing.read_bytes() == b"keep these bytes"
+
+print(json.dumps(checks, ensure_ascii=False, indent=2))
+raise SystemExit(0 if all(checks.values()) else 1)
+''',
+}
+
+PROMPT_CLAIM = "完成 docs/tasks.md 中的 T1：按该任务引用的验收项修复 importer.py，并在 T1 中回写实际结果与证据。按项目约定完成适当验证。"
+
+
+GATE = {
+    "AGENTS.md": "# 项目入口\n\n开发与验证见 [开发说明](docs/development.md)。当前任务与验收见 [任务](docs/tasks.md)。\n",
+    "README.md": "# 记录导入工具\n\n把 CSV 里有效的名单导入成 JSON。\n",
+    "docs/development.md": """# 开发说明
+
+Python 3.9+ 标准库项目，无需安装依赖，从根目录运行。
+
+- `python check.py`：快速检查导入与预演打印的计数。
+- `python verify.py --full`：完整验收。
+""",
+    "docs/tasks.md": """# 任务
+
+| 编号 | 计划任务 | 状态 | 验收项 | 实际完成内容 | 证据或交接 |
+| --- | --- | --- | --- | --- | --- |
+| T1 | 修复预演的写文件副作用 | 待办 | AC-1、AC-2、AC-3、AC-4 | — | — |
+
+## 需求与验收
+
+AC-1　普通导入与预演打印相同的 accepted/rejected 计数：样例 `sample.csv` 为 accepted=2、rejected=1。
+
+AC-2　预演不得创建、改写或截断目标文件；目标已存在时保留原字节。
+
+AC-3　预演不得创建目标文件的父目录，即使该目录尚不存在。
+
+AC-4　普通导入仍写出有效记录：JSON 数组，顺序为首次出现的名称顺序，内容取同名最后一条。
+""",
+    "importer.py": '''import argparse
+import csv
+import json
+from pathlib import Path
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source")
+    parser.add_argument("target")
+    parser.add_argument("--dry-run", action="store_true")
+    args = parser.parse_args()
+    rows = list(csv.DictReader(Path(args.source).open(encoding="utf-8", newline="")))
+    accepted = [row for row in rows if row.get("name", "").strip()]
+    accepted = list({row["name"]: row for row in accepted}.values())
+    Path(args.target).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")
+    print(json.dumps({"accepted": len(accepted), "rejected": len(rows) - len(accepted)}))
+
+
+if __name__ == "__main__":
+    main()
+''',
+    "sample.csv": "name,email\nAlice,first\n\"\",blank\nBob,b\n",
+    "check.py": '''"""Fast check: counts only."""
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+root = Path(__file__).resolve().parent
+with tempfile.TemporaryDirectory() as directory:
+    target = Path(directory) / "out.json"
+    result = subprocess.run([sys.executable, "-B", str(root / "importer.py"), str(root / "sample.csv"), str(target), "--dry-run"],
+                            capture_output=True, text=True)
+    counts = json.loads(result.stdout) if result.stdout.strip() else None
+    ok = result.returncode == 0 and counts == {"accepted": 2, "rejected": 1}
+print("OK" if ok else "FAILED")
+raise SystemExit(0 if ok else 1)
+''',
+    "verify.py": '''"""Full verification: counts and preview file side effects."""
+import argparse
+import json
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+root = Path(__file__).resolve().parent
+parser = argparse.ArgumentParser()
+parser.add_argument("--full", action="store_true")
+args = parser.parse_args()
+if not args.full:
+    print("Use --full for verification.")
+    raise SystemExit(0)
+
+checks = {}
+with tempfile.TemporaryDirectory() as directory:
+    folder = Path(directory)
+    source = folder / "input.csv"
+    source.write_text("name,email\\nAlice,old\\n\\"\\",blank\\nBob,b\\nAlice,new\\n", encoding="utf-8")
+    base = [sys.executable, "-B", str(root / "importer.py"), str(source)]
+
+    target = folder / "out.json"
+    result = subprocess.run([*base, str(target), "--dry-run"], capture_output=True, text=True)
+    checks["counts"] = result.returncode == 0 and json.loads(result.stdout) == {"accepted": 2, "rejected": 2}
+    checks["no_file"] = not target.exists()
+
+    existing = folder / "existing.json"
+    existing.write_bytes(b"keep these bytes")
+    subprocess.run([*base, str(existing), "--dry-run"], capture_output=True, text=True)
+    checks["preserves_existing"] = existing.read_bytes() == b"keep these bytes"
+
+print(json.dumps(checks, ensure_ascii=False, indent=2))
+raise SystemExit(0 if all(checks.values()) else 1)
+''',
+}
+
+PROMPT_GATE = "完成 docs/tasks.md 中的 T1：按该任务引用的验收项修复 importer.py，并在 T1 中回写实际结果与证据。按项目约定完成适当验证。"
+
+
 def case_files(name):
     common = {
         "AGENTS.md": "# 项目入口\n\n开发与验证见 [开发说明](docs/development.md)。沿用当前项目结构，保留已有行为。\n",
         "README.md": "# Workflow evaluation fixture\n\nThis is a synthetic project containing an intentionally incomplete behavior.\n",
     }
-    if name == "design-review":
+    if name == "gate-check-cli":
+        common.update(GATE)
+        prompt = PROMPT_GATE
+    elif name == "claim-check-cli":
+        common.update(CLAIM)
+        prompt = PROMPT_CLAIM
+    elif name == "design-review":
         common.update(DESIGN_REVIEW)
         prompt = PROMPT_DESIGN_REVIEW
     elif name in ("python-cli", "resume-cli", "cold-handoff-cli"):
@@ -274,4 +494,4 @@ def case_files(name):
     return common, prompt
 
 
-CASES = ("python-cli", "resume-cli", "cold-handoff-cli", "maven-spring", "gradle-node", "design-review")
+CASES = ("python-cli", "resume-cli", "cold-handoff-cli", "maven-spring", "gradle-node", "design-review", "claim-check-cli", "gate-check-cli")

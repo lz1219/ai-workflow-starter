@@ -12,6 +12,8 @@
 | maven-spring | 通过真实 Spring MockMvc 验证计数、筛选和非法参数 |
 | gradle-node | 后端 HTTP 验证，并启动真实应用核对 Node 消费端筛选与错误处理 |
 | design-review | 语义评审，由评审者按判据判定；`grade` 返回 `environment_error`，不自动评分 |
+| claim-check-cli | 行为验收加任务回写是否与实际结果一致（用于规则消融） |
+| gate-check-cli | 自带检查不覆盖某条验收项时，外部验收能否发现漏项（用于规则消融） |
 
 ## 准备试验
 
