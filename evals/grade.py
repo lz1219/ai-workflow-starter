@@ -137,6 +137,11 @@ def check_java(workspace, mixed):
 
 
 def grade(workspace, case):
+    if case == "design-review":
+        # Semantic scenarios are judged by a reviewer against the criteria in
+        # design-review.md; there is no behavioral grader that could pass or fail them.
+        return {"status": "environment_error", "checks": {},
+                "output": "design-review is reviewed semantically, not graded automatically"}
     try:
         if case.endswith("cli"):
             checks, output = check_python(workspace, case != "python-cli")

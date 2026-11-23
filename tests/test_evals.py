@@ -32,6 +32,17 @@ class EvalTests(unittest.TestCase):
             '    Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")',
             '    if not args.dry_run:\n        Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")'), encoding="utf-8")
 
+    def test_design_review_case_prepares_and_refuses_automated_grading(self):
+        trial = self.prepare("design-review")
+        workspace = trial / "workspace"
+        self.assertTrue((workspace / "docs/design/Req-20251120-事件关闭通知/design.md").is_file())
+        self.assertTrue((workspace / "app/events.py").is_file())
+        result = self.call("grade", "--trial", trial)
+        self.assertEqual(result.returncode, 2, result.stdout + result.stderr)
+        graded = json.loads((trial / "grade.json").read_text(encoding="utf-8"))
+        self.assertEqual(graded["status"], "environment_error")
+        self.assertEqual(graded["checks"], {})
+
     def test_holdout_checks_reject_original_bug_and_accept_real_fix(self):
         trial = self.prepare()
         bad = self.call("grade", "--trial", trial)
