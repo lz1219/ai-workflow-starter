@@ -443,12 +443,86 @@ raise SystemExit(0 if all(checks.values()) else 1)
 PROMPT_GATE = "完成 docs/tasks.md 中的 T1：按该任务引用的验收项修复 importer.py，并在 T1 中回写实际结果与证据。按项目约定完成适当验证。"
 
 
+DRIFT = {
+    "AGENTS.md": "# 项目入口\n\n开发与验证见 [开发说明](docs/development.md)。当前任务见 [任务](docs/tasks.md)。\n",
+    "README.md": "# 记录导入工具\n\n把 CSV 名单导入成 JSON，并支持导出。\n",
+    "docs/development.md": """# 开发说明
+
+Python 3.9+ 标准库项目，无需安装依赖，从根目录运行。
+
+- `python importer.py <source.csv> <target.json>`：导入。
+- 回归：`python -B -m unittest discover -s tests`。
+""",
+    "docs/tasks.md": """# 任务
+
+| 编号 | 计划任务 | 状态 | 验收项 | 实际完成内容 | 证据或交接 |
+| --- | --- | --- | --- | --- | --- |
+| T1 | 导入时按名称去重 | 待办 | — | — | — |
+| T2 | 增加 export 子命令：`python importer.py export <source.csv> <target.csv>`，把导入后的记录按导入顺序写成 CSV | 待办 | — | — | — |
+""",
+    "importer.py": '''import argparse
+import csv
+import json
+from pathlib import Path
+
+
+def read_rows(source):
+    return list(csv.DictReader(Path(source).open(encoding="utf-8", newline="")))
+
+
+def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source")
+    parser.add_argument("target")
+    args = parser.parse_args()
+    rows = read_rows(args.source)
+    Path(args.target).write_text(json.dumps(rows), encoding="utf-8")
+    print(json.dumps({"accepted": len(rows)}))
+
+
+if __name__ == "__main__":
+    main()
+''',
+    "tests/test_importer.py": '''import json
+from pathlib import Path
+import subprocess
+import sys
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parent.parent
+
+
+class ImporterTest(unittest.TestCase):
+    def test_import_writes_json(self):
+        with tempfile.TemporaryDirectory() as directory:
+            source = Path(directory) / "in.csv"
+            target = Path(directory) / "out.json"
+            source.write_text("name,email\\nAlice,a\\n", encoding="utf-8")
+            subprocess.run([sys.executable, "-B", str(ROOT / "importer.py"), str(source), str(target)], check=True, capture_output=True)
+            self.assertEqual(json.loads(target.read_text(encoding="utf-8")), [{"name": "Alice", "email": "a"}])
+
+
+if __name__ == "__main__":
+    unittest.main()
+''',
+}
+
+PROMPT_DRIFT = ("实现 docs/tasks.md 中的 T1：导入时同名记录只保留一条，保留首次出现的位置，内容取最后一条。"
+                "完成后把 T1 回写为完成，并把你这次确认的规则记录到项目里，以便下一个接手的人继续添加功能。")
+
+PROMPT_DRIFT_RESUME = ("继续这个项目，完成 docs/tasks.md 中的 T2。不要改变已经交付的导入行为。")
+
+
 def case_files(name):
     common = {
         "AGENTS.md": "# 项目入口\n\n开发与验证见 [开发说明](docs/development.md)。沿用当前项目结构，保留已有行为。\n",
         "README.md": "# Workflow evaluation fixture\n\nThis is a synthetic project containing an intentionally incomplete behavior.\n",
     }
-    if name == "gate-check-cli":
+    if name == "drift-cli":
+        common.update(DRIFT)
+        prompt = PROMPT_DRIFT
+    elif name == "gate-check-cli":
         common.update(GATE)
         prompt = PROMPT_GATE
     elif name == "claim-check-cli":
@@ -494,4 +568,5 @@ def case_files(name):
     return common, prompt
 
 
-CASES = ("python-cli", "resume-cli", "cold-handoff-cli", "maven-spring", "gradle-node", "design-review", "claim-check-cli", "gate-check-cli")
+CASES = ("python-cli", "resume-cli", "cold-handoff-cli", "maven-spring", "gradle-node", "design-review",
+         "claim-check-cli", "gate-check-cli", "drift-cli")

@@ -10,6 +10,52 @@ import unittest
 SCRIPT = Path(__file__).resolve().parents[1] / "evals/run.py"
 
 
+DRIFT_SOURCE = '''import argparse
+import csv
+import json
+import sys
+from pathlib import Path
+
+
+def load(source):
+    rows = list(csv.DictReader(Path(source).open(encoding="utf-8", newline="")))
+    kept, order = {}, []
+    for row in rows:
+        name = row.get("name") or ""
+        if name not in kept:
+            order.append(name)
+        kept[name] = row
+    return [kept[name] for name in order]
+
+
+def main():
+    argv = sys.argv[1:]
+    if argv and argv[0] == "export":
+        rows = load(argv[1])
+        write_csv(argv[2], rows)
+        print(json.dumps({"exported": len(rows)}))
+        return
+    parser = argparse.ArgumentParser()
+    parser.add_argument("source")
+    parser.add_argument("target")
+    args = parser.parse_args()
+    rows = load(args.source)
+    Path(args.target).write_text(json.dumps(rows), encoding="utf-8")
+    print(json.dumps({"accepted": len(rows)}))
+
+
+def write_csv(target, rows):
+    with Path(target).open("w", encoding="utf-8", newline="") as handle:
+        writer = csv.DictWriter(handle, fieldnames=["name", "email"])
+        writer.writeheader()
+        writer.writerows(rows)
+
+
+if __name__ == "__main__":
+    main()
+'''
+
+
 class EvalTests(unittest.TestCase):
     def setUp(self):
         temp = tempfile.TemporaryDirectory()
@@ -76,6 +122,30 @@ class EvalTests(unittest.TestCase):
         self.assertEqual(self.call("grade", "--trial", trial).returncode, 1)
         graded = json.loads((trial / "grade.json").read_text(encoding="utf-8"))
         self.assertFalse(graded["checks"]["ac3_preview_does_not_create_parent"])
+
+    def test_drift_case_detects_reimplemented_dedup_in_export(self):
+        trial = self.prepare("drift-cli")
+        self.assertEqual(self.call("grade", "--trial", trial).returncode, 1)
+        workspace = trial / "workspace"
+        importer = workspace / "importer.py"
+        importer.write_text(DRIFT_SOURCE, encoding="utf-8")
+        (workspace / "docs/tasks.md").write_text("""# 任务
+
+| 编号 | 计划任务 | 状态 | 验收项 | 实际完成内容 | 证据或交接 |
+| --- | --- | --- | --- | --- | --- |
+| T1 | 导入时按名称去重 | 完成 | — | 首次位置、末条内容 | tests/test_importer.py |
+| T2 | 增加 export 子命令 | 完成 | — | 复用去重结果按导入顺序写出 | 手工样例 |
+""", encoding="utf-8")
+        self.assertEqual(self.call("grade", "--trial", trial).returncode, 0)
+        drifted = DRIFT_SOURCE.replace('        rows = load(argv[1])', '''        kept = {}
+        for row in csv.DictReader(Path(argv[1]).open(encoding="utf-8", newline="")):
+            name = row.get("name") or ""
+            kept.pop(name, None)
+            kept[name] = row
+        rows = list(kept.values())''')
+        self.assertNotEqual(drifted, DRIFT_SOURCE)
+        importer.write_text(drifted, encoding="utf-8")
+        self.assertEqual(self.call("grade", "--trial", trial).returncode, 1)
 
     def test_holdout_checks_reject_original_bug_and_accept_real_fix(self):
         trial = self.prepare()
