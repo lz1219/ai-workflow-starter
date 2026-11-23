@@ -91,6 +91,7 @@ PROMPT_JAVA = "完善订单计数的 status 筛选。固定样例包含 3 条订
 
 DESIGN_REVIEW = {
     "AGENTS.md": "# 项目入口\n\n事件关闭与通知服务。开发与验证见 [开发说明](docs/development.md)，需求索引见 [需求看板](docs/design/README.md)。\n",
+    "README.md": "# 事件关闭与通知服务\n\n最小实现与设计文档，供内部评审和维护者阅读。\n",
     "docs/development.md": "# 开发说明\n\nPython 3.9+ 标准库项目，无需安装依赖。根目录运行 `python -B -m unittest discover -s tests`。事件与通知任务存放在同一关系数据库的不同表；本工作区只有设计文档和最小实现，未连接真实数据库。\n",
     "docs/design/README.md": "# 需求看板\n\n| 需求 | 状态 | 说明 |\n| --- | --- | --- |\n| [Req-20251120-事件关闭通知](Req-20251120-事件关闭通知/design.md) | 设计中 | 关闭事件的权限、状态与通知任务 |\n",
     "docs/design/Req-20251120-事件关闭通知/design.md": """# 事件关闭与通知

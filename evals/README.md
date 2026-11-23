@@ -11,6 +11,7 @@
 | cold-handoff-cli | 从原任务续做，保留现行的大小写规则和历史证据，留下与当前代码一致且可定位的验证回执 |
 | maven-spring | 通过真实 Spring MockMvc 验证计数、筛选和非法参数 |
 | gradle-node | 后端 HTTP 验证，并启动真实应用核对 Node 消费端筛选与错误处理 |
+| design-review | 语义评审，由评审者按判据判定；`grade` 返回 `environment_error`，不自动评分 |
 
 ## 准备试验
 
