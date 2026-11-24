@@ -11,6 +11,7 @@
 | 设计、任务、开发规范模板 | `skills/change-design/assets/{design.md,tasks.md}`、`skills/project-onboard/assets/development.md` |
 | 脚本 | `skills/project-onboard/scripts/{maven_preflight.py,workflow_update.py}`、`skills/change-design/scripts/requirements.py` |
 | 评测场景与评分器 | `evals/{cases.py,grade.py,run.py,cold_handoff.py}`，历史结论与边界在 [evals/VALIDATION.md](evals/VALIDATION.md) |
+| 接手 11 月的评测工作 | 从 [DeepSeek 接手入口](evals/README.md#deepseek-接手入口) 核对代码版本、已有试验和待验证问题 |
 | 端到端教学样例 | [examples/quarterly-report/](examples/quarterly-report/)（自带 `AGENTS.md`、设计与任务记录） |
 | 回归用例 | `tests/`，4 个文件、53 个用例 |
 
