@@ -109,4 +109,6 @@ AI 任务效果使用 [真实任务评测](evals/README.md)，提供 Python CLI�
 
 要接着做对照，前提是固定模型与工具版本、每种配置至少三次、保留原始轨迹（用 `evals/run.py run` 配 runner，而不是像本轮那样用派生会话代办），并让评审独立于执行者。最后两项正是本轮缺少的。
 
+2026-11-24 已在另一条模型路由上用独立 CLI 复跑一对冷接手。两组的 B 会话都读取了 A 留下的规则，外部验收各通过 3 项。四份会话轨迹与两份阶段 A 快照可分别复查。[复跑命令](evals/README.md#复跑两阶段冷接手) · [本轮记录](evals/VALIDATION.md#2026-11-24--带轨迹的冷接手与月份回写复测)
+
 面向 `main` 的 PR 会自动在 Ubuntu 24.04 / Python 3.9 和 Windows Server 2025 / Python 3.13 上运行同一套测试。[PR 回归配置](.github/workflows/pr-regression.yml)

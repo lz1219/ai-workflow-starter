@@ -78,6 +78,21 @@ class EvalTests(unittest.TestCase):
             '    Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")',
             '    if not args.dry_run:\n        Path(args.target).write_text(json.dumps(accepted), encoding="utf-8")'), encoding="utf-8")
 
+    def test_quarter_handoff_detects_inverted_months_despite_equal_totals(self):
+        trial = self.prepare("quarter-handoff")
+        path = trial / "workspace/handoff.json"
+        entries = {"february.csv": {"reported": [1, 3], "missing": [2]},
+                   "revised.csv": {"reported": [1, 3], "missing": [2]}}
+        path.write_text(json.dumps(entries), encoding="utf-8")
+        checks = self.cold_checks(trial, 1)
+        self.assertFalse(checks["february.csv"])
+        self.assertTrue(checks["revised.csv"])
+        entries["february.csv"] = {"reported": [2], "missing": [1, 3]}
+        path.write_text(json.dumps(entries), encoding="utf-8")
+        self.assertTrue(all(self.cold_checks(trial, 0).values()))
+        (trial / "workspace/reports/summary.csv").write_text("changed", encoding="utf-8")
+        self.assertFalse(self.cold_checks(trial, 1)["published_reports_unchanged"])
+
     def test_design_review_case_prepares_and_refuses_automated_grading(self):
         trial = self.prepare("design-review")
         workspace = trial / "workspace"
@@ -146,6 +161,69 @@ class EvalTests(unittest.TestCase):
         self.assertNotEqual(drifted, DRIFT_SOURCE)
         importer.write_text(drifted, encoding="utf-8")
         self.assertEqual(self.call("grade", "--trial", trial).returncode, 1)
+
+    def test_drift_runner_hands_only_workspace_to_second_process(self):
+        trial = self.prepare("drift-cli")
+        runner = self.root / "runner.json"
+        script = self.root / "actor.py"
+        # A delivers import only. B shares its load() rule and adds export.
+        start = DRIFT_SOURCE.index('    if argv and argv[0] == "export":')
+        end = DRIFT_SOURCE.index('    parser = argparse.ArgumentParser()', start)
+        import_only = DRIFT_SOURCE[:start] + DRIFT_SOURCE[end:]
+        (self.root / "import-only.py").write_text(import_only, encoding="utf-8")
+        (self.root / "import-export.py").write_text(DRIFT_SOURCE, encoding="utf-8")
+        script.write_text("""import os, sys
+from pathlib import Path
+prompt = sys.stdin.buffer.read().decode('utf-8')
+note = Path('handoff.txt')
+if 'T1' in prompt:
+    assert not note.exists()
+    note.write_text(str(os.getpid()))
+    source = 'import-only.py'
+    task = 'T1'
+    response = 'private A response'
+else:
+    assert 'T2' in prompt and 'private A response' not in prompt
+    assert int(note.read_text()) != os.getpid()
+    note.write_text('B received the handoff')
+    source = 'import-export.py'
+    task = 'T2'
+    response = 'B completed'
+Path('importer.py').write_bytes(Path(__file__).with_name(source).read_bytes())
+tasks = Path('docs/tasks.md')
+rows = tasks.read_text(encoding='utf-8').splitlines()
+outcome = '按名称去重' if task == 'T1' else '按导入顺序导出 CSV'
+for index, row in enumerate(rows):
+    if row.startswith('| ' + task + ' |'):
+        rows[index] = row.replace('待办 | — | — | —', '完成 | — | ' + outcome + ' | importer.py')
+tasks.write_text('\\n'.join(rows), encoding='utf-8')
+Path(sys.argv[1]).write_text(response)
+print(response)
+""", encoding="utf-8")
+        runner.write_text(json.dumps({"argv": [sys.executable, str(script), "{response}"]}), encoding="utf-8")
+        attempt = self.call("run", "--trial", trial, "--runner", runner)
+        self.assertEqual(attempt.returncode, 0, attempt.stdout + attempt.stderr)
+        for name in ("A", "B"):
+            stage = trial / name
+            self.assertEqual(json.loads((stage / "execution.json").read_bytes())["status"], "completed")
+            self.assertEqual((stage / "response.md").read_text().strip(), (stage / "trace.jsonl").read_text().strip())
+        self.assertTrue((trial / "A/workspace/handoff.txt").read_text().isdigit())
+        self.assertEqual((trial / "workspace/handoff.txt").read_text(), "B received the handoff")
+        self.assertEqual((trial / "A/workspace/importer.py").read_text(encoding="utf-8"), import_only)
+        self.assertEqual(json.loads((trial / "grade.json").read_bytes())["status"], "passed")
+
+    def test_drift_aborts_on_stage_error(self):
+        runner = self.root / "runner.json"
+        for stop, variant in (("T1", "baseline"), ("T2", "candidate")):
+            with self.subTest(stage=stop):
+                trial = self.prepare("drift-cli", variant)
+                code = "import sys; sys.exit(9 if %r in sys.stdin.buffer.read() else 0)" % stop.encode()
+                runner.write_text(json.dumps({"argv": [sys.executable, "-c", code]}), encoding="utf-8")
+                self.assertEqual(self.call("run", "--trial", trial, "--runner", runner).returncode, 2)
+                result = json.loads((trial / "execution.json").read_bytes())
+                self.assertEqual(result["status"], "execution_error")
+                self.assertEqual((trial / "B").exists(), stop == "T2")
+                self.assertFalse((trial / "grade.json").exists())
 
     def test_holdout_checks_reject_original_bug_and_accept_real_fix(self):
         trial = self.prepare()

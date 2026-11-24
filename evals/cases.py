@@ -519,7 +519,18 @@ def case_files(name):
         "AGENTS.md": "# 项目入口\n\n开发与验证见 [开发说明](docs/development.md)。沿用当前项目结构，保留已有行为。\n",
         "README.md": "# Workflow evaluation fixture\n\nThis is a synthetic project containing an intentionally incomplete behavior.\n",
     }
-    if name == "drift-cli":
+    if name == "quarter-handoff":
+        common.update({
+            "README.md": "# 季度月报归档\n\n本目录保存已交付的季度报表及其交接清单。\n",
+            "docs/development.md": "# 归档约定\n\n交接时只更新 handoff.json。按自然月依次在 reported 和 missing 数组中登记月份整数。"
+                                   "reported 包括实报金额为零的月份。已发布的月报与汇总是只读证据。\n",
+            "reports/february.csv": "month,amount,status\n1,0,missing\n2,120,reported\n3,0,missing\n",
+            "reports/revised.csv": "month,amount,status\n1,0,reported\n2,0,missing\n3,120,reported\n",
+            "reports/summary.csv": "file,total,quarter_average\nfebruary.csv,120,40\nrevised.csv,120,40\n",
+            "handoff.json": '{"february.csv":{"reported":[],"missing":[]},"revised.csv":{"reported":[],"missing":[]}}\n',
+        })
+        prompt = "季度报表已交付。按项目约定补全现有交接清单，供下一位维护者核对两份交付物的实报月和缺报月。"
+    elif name == "drift-cli":
         common.update(DRIFT)
         prompt = PROMPT_DRIFT
     elif name == "gate-check-cli":
@@ -569,4 +580,4 @@ def case_files(name):
 
 
 CASES = ("python-cli", "resume-cli", "cold-handoff-cli", "maven-spring", "gradle-node", "design-review",
-         "claim-check-cli", "gate-check-cli", "drift-cli")
+         "claim-check-cli", "gate-check-cli", "drift-cli", "quarter-handoff")

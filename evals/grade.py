@@ -16,6 +16,7 @@ from urllib.request import urlopen
 import xml.etree.ElementTree as ET
 
 from cold_handoff import check_handoff
+from cases import case_files
 
 
 HTTP_TEST = '''package example;
@@ -258,6 +259,23 @@ def check_java(workspace, mixed):
         return checks, output
 
 
+def check_quarter_handoff(workspace):
+    files, _ = case_files("quarter-handoff")
+    handoff = json.loads((workspace / "handoff.json").read_text(encoding="utf-8-sig"))
+    checks = {}
+    for name in ("february.csv", "revised.csv"):
+        rows = list(csv.DictReader(files["reports/" + name].splitlines()))
+        expected = {status: [int(row["month"]) for row in rows if row["status"] == status]
+                    for status in ("reported", "missing")}
+        # JSON true compares equal to Python 1. Compare the JSON types as well.
+        actual = handoff.get(name) if isinstance(handoff, dict) else None
+        checks[name] = json.dumps(actual, sort_keys=True) == json.dumps(expected, sort_keys=True)
+    checks["published_reports_unchanged"] = all(
+        (workspace / path).read_bytes() == data.encode()
+        for path, data in files.items() if path.startswith("reports/"))
+    return checks, "Checked handoff month lists against the original published report rows."
+
+
 def grade(workspace, case):
     if case == "design-review":
         # Semantic scenarios are judged by a reviewer against the criteria in
@@ -265,7 +283,9 @@ def grade(workspace, case):
         return {"status": "environment_error", "checks": {},
                 "output": "design-review is reviewed semantically, not graded automatically"}
     try:
-        if case.endswith("cli"):
+        if case == "quarter-handoff":
+            checks, output = check_quarter_handoff(workspace)
+        elif case.endswith("cli"):
             if case == "claim-check-cli":
                 checks, output = check_claim(workspace)
             elif case == "gate-check-cli":

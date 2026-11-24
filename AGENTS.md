@@ -12,7 +12,7 @@
 | 脚本 | `skills/project-onboard/scripts/{maven_preflight.py,workflow_update.py}`、`skills/change-design/scripts/requirements.py` |
 | 评测场景与评分器 | `evals/{cases.py,grade.py,run.py,cold_handoff.py}`，历史结论与边界在 [evals/VALIDATION.md](evals/VALIDATION.md) |
 | 端到端教学样例 | [examples/quarterly-report/](examples/quarterly-report/)（自带 `AGENTS.md`、设计与任务记录） |
-| 回归用例 | `tests/`，4 个文件、46 个用例 |
+| 回归用例 | `tests/`，4 个文件、53 个用例 |
 
 约定少、入口集中，因此不单列 `docs/development.md`：长期约定写在本文件，单次改动写进提交说明或 PR。受跟踪文件只有源码、文档、测试与 CI 配置，没有构建产物。
 
@@ -28,11 +28,11 @@
 
 ## 验证
 
-工作目录为仓库根。运行时 Python 3.9+（本机 3.13.2），Git 必需，不联网。下表为本机 2026-11-23 的实测结果。
+工作目录为仓库根。运行时 Python 3.9+（本机 3.13.2），Git 必需，不联网。全量回归复核于 2026-11-24。
 
 | 目的 | 命令 | 实测 |
 | --- | --- | --- |
-| 全量回归 | `python -B -m unittest discover -s tests` | 46 项通过，约 131 s |
+| 全量回归 | `python -X utf8 -B -m unittest discover -s tests` | 53 项通过，约 145 s |
 | 单文件回归 | `python -X utf8 -B -m unittest discover -s tests -p test_requirements.py` | 15 项通过，约 12 s |
 | 示例交付物 | 在 `examples/quarterly-report` 下 `python -B -m unittest -v test_export` | 需 openpyxl 3.1.5 |
 

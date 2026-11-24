@@ -12,7 +12,7 @@ import subprocess
 import sys
 import time
 
-from cases import CASES, case_files
+from cases import CASES, PROMPT_DRIFT_RESUME, case_files
 from grade import grade
 
 
@@ -27,9 +27,20 @@ def fingerprint(files):
     return value.hexdigest()
 
 
+def project_files(workspace):
+    for path in workspace.rglob("*"):
+        relative = path.relative_to(workspace)
+        if any(part in (".git", "__pycache__", "target", "build", ".gradle") for part in relative.parts):
+            continue
+        if path.is_file():
+            if not path.resolve().is_relative_to(workspace.resolve()):
+                raise ValueError(f"File points outside the trial workspace: {relative}")
+            yield relative
+
+
 def snapshot(workspace):
-    return {p.relative_to(workspace).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
-            for p in workspace.rglob("*") if p.is_file() and not any(part in (".git", "__pycache__", "target", "build", ".gradle") for part in p.relative_to(workspace).parts)}
+    return {path.as_posix(): hashlib.sha256((workspace / path).read_bytes()).hexdigest()
+            for path in project_files(workspace)}
 
 
 def prepare(args):
@@ -60,11 +71,16 @@ def prepare(args):
     for command in (["init", "-q"], ["config", "core.autocrlf", "false"], ["add", "."],
                     ["-c", "user.name=Workflow Eval", "-c", "user.email=eval@example.invalid", "commit", "-qm", "Fixture baseline"]):
         subprocess.run(["git", "-C", str(workspace), *command], check=True, capture_output=True)
-    prompt = ("先阅读项目入口。只在当前工作区内完成任务，不访问凭据或工作区外的评测文件，不推送、不联网调研。"
-              "可运行项目原有构建（必要依赖下载允许）。最后报告实际改动和验证结果。\n\n" + prompt)
-    (trial / "prompt.txt").write_text(prompt, encoding="utf-8")
+    prefix = ("先阅读项目入口。只在当前工作区内完成任务，不访问凭据或工作区外的评测文件，不推送、不联网调研。"
+              "可运行项目原有构建（必要依赖下载允许）。最后报告实际改动和验证结果。\n\n")
+    prompts = {"prompt.txt": (prefix + prompt).encode()}
+    if args.case == "drift-cli":
+        prompts["resume.txt"] = (prefix + PROMPT_DRIFT_RESUME).encode()
+    for name, data in prompts.items():
+        (trial / name).write_bytes(data)
+    prompt_id = fingerprint(prompts) if len(prompts) > 1 else hashlib.sha256(prompts["prompt.txt"]).hexdigest()
     save(trial / "trial.json", {"case": args.case, "variant": args.variant, "fixture": fixture_id,
-                                 "prompt": hashlib.sha256(prompt.encode()).hexdigest(), "workflow": workflow_id,
+                                 "prompt": prompt_id, "workflow": workflow_id,
                                  "initial_files": snapshot(workspace)})
     print(trial)
 
@@ -94,22 +110,65 @@ def execute(args):
     metadata = json.loads((trial / "trial.json").read_text(encoding="utf-8"))
     if snapshot(trial / "workspace") != metadata["initial_files"]:
         raise ValueError("Workspace changed since preparation; use a fresh trial")
-    config = json.loads(args.runner.read_text(encoding="utf-8-sig"))
+    config_bytes = args.runner.read_bytes()
+    config = json.loads(config_bytes.decode("utf-8-sig"))
     if not isinstance(config.get("argv"), list) or not config["argv"] or any(not isinstance(a, str) for a in config["argv"]):
         raise ValueError("Runner requires an argv array")
-    substitutions = {"{workspace}": str(trial / "workspace"), "{response}": str(trial / "response.md")}
+    workspace = trial / "workspace"
+    prompt = (trial / "prompt.txt").read_text(encoding="utf-8")
+    runner_info = {"runner": config.get("label", "unnamed"), "environment": config.get("environment"),
+                   "runner_config": fingerprint({"runner": config_bytes})}
+    if metadata["case"] == "drift-cli":
+        if not (trial / "resume.txt").exists():
+            raise ValueError("Prepare a new drift-cli trial to capture both stages")
+        resume = (trial / "resume.txt").read_text(encoding="utf-8")
+        if fingerprint({"prompt.txt": prompt.encode(), "resume.txt": resume.encode()}) != metadata["prompt"]:
+            raise ValueError("Trial prompts changed since preparation")
+    # Reserve the trial before spawning a process, also after an interrupted attempt.
+    with (trial / "execution.json").open("x", encoding="utf-8") as handle:
+        json.dump({**runner_info, "status": "started"}, handle)
+    if metadata["case"] == "drift-cli":
+        (trial / "runner.json").write_bytes(config_bytes)
+        stages = {}
+        for name, instruction in (("A", prompt), ("B", resume)):
+            output = trial / name
+            output.mkdir()
+            (output / "prompt.txt").write_bytes(instruction.encode())
+            result = run_stage(workspace, output, instruction, config, runner_info, args.timeout)
+            stages[name] = result
+            if result["status"] != "completed":
+                break
+            if name == "A":
+                checkpoint = output / "workspace"
+                for path in project_files(workspace):
+                    target = checkpoint / path
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copyfile(workspace / path, target)
+        summary = {**runner_info, "status": result["status"], "stages": stages,
+                   "elapsed_seconds": round(sum(s["elapsed_seconds"] for s in stages.values()), 2)}
+        save(trial / "execution.json", summary)
+    else:
+        result = run_stage(workspace, trial, prompt, config, runner_info, args.timeout)
+    if result["status"] == "completed":
+        return {"passed": 0, "failed": 1, "environment_error": 2}[grade_trial(trial)["status"]]
+    print(json.dumps(result, ensure_ascii=False, indent=2))
+    return 2
+
+
+def run_stage(workspace, output, prompt, config, runner_info, timeout):
+    substitutions = {"{workspace}": str(workspace), "{response}": str(output / "response.md")}
     argv = [substitutions.get(arg, arg) for arg in config["argv"]]
     argv[0] = shutil.which(argv[0]) or argv[0]
     started = time.monotonic()
-    result = {"runner": config.get("label", "unnamed"), "environment": config.get("environment"), "runner_config": fingerprint({"runner": args.runner.read_bytes()}),
+    result = {**runner_info,
               "status": "execution_error", "usage": None, "cost": None, "human_corrections": None}
     try:
-        with (trial / "trace.jsonl").open("w", encoding="utf-8") as out, (trial / "stderr.log").open("w", encoding="utf-8") as err:
+        with (output / "trace.jsonl").open("w", encoding="utf-8") as out, (output / "stderr.log").open("w", encoding="utf-8") as err:
             process = subprocess.Popen(argv, stdin=subprocess.PIPE,
-                                       cwd=trial / "workspace", text=True, encoding="utf-8", stdout=out, stderr=err,
+                                       cwd=workspace, text=True, encoding="utf-8", stdout=out, stderr=err,
                                        start_new_session=os.name != "nt")
             try:
-                process.communicate((trial / "prompt.txt").read_text(encoding="utf-8"), timeout=args.timeout)
+                process.communicate(prompt, timeout=timeout)
             except subprocess.TimeoutExpired:
                 if os.name == "nt":
                     subprocess.run(["taskkill", "/PID", str(process.pid), "/T", "/F"], capture_output=True)
@@ -121,12 +180,12 @@ def execute(args):
     except (OSError, subprocess.TimeoutExpired) as error:
         result["error"] = type(error).__name__
     result["elapsed_seconds"] = round(time.monotonic() - started, 2)
-    stderr = (trial / "stderr.log").read_text(encoding="utf-8")
+    stderr = (output / "stderr.log").read_text(encoding="utf-8", errors="replace")
     if "rejected: blocked by policy" in stderr:
         result["status"] = "environment_blocked"
         result["error"] = "Runner tools were rejected by the host execution policy"
     # Usage is taken only from runner events; absent telemetry remains unknown.
-    for line in (trial / "trace.jsonl").read_text(encoding="utf-8").splitlines():
+    for line in (output / "trace.jsonl").read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             event = json.loads(line)
             if event.get("type") == "turn.completed" and isinstance(event.get("usage"), dict):
@@ -137,12 +196,8 @@ def execute(args):
                         result["usage"][key] = result["usage"].get(key, 0) + value
         except (ValueError, AttributeError):
             pass
-    save(trial / "execution.json", result)
-    if result["status"] == "completed":
-        return {"passed": 0, "failed": 1, "environment_error": 2}[grade_trial(trial)["status"]]
-    else:
-        print(json.dumps(result, ensure_ascii=False, indent=2))
-        return 2
+    save(output / "execution.json", result)
+    return result
 
 
 def report(args):

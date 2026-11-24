@@ -15,6 +15,7 @@
 | claim-check-cli | 行为验收加任务回写是否与实际结果一致（用于规则消融） |
 | gate-check-cli | 自带检查不覆盖某条验收项时，外部验收能否发现漏项（用于规则消融） |
 | drift-cli | 两阶段：A 交付一半，B 冷接手；外部验收核对是否保持已交付的导入顺序（用于跨会话对照） |
+| quarter-handoff | 交接清单是否准确记录两份报表的实报月、缺报月，并保留已发布报表。两份的合计和平均相同。 |
 
 ## 准备试验
 
@@ -48,6 +49,22 @@ python evals/run.py run --trial <试验目录> --runner <runner.json> --timeout 
 任务通过标准输入传入，参数数组直接执行。`{workspace}` 和 `{response}` 必须各占一个数组元素。runner 应读取标准输入，在限定工作区内执行任务。试验目录只是工作隔离，文件系统权限由所用 Agent 宿主或容器提供。不要将试验运行器连接到生产环境或赋予额外凭据。
 
 原始过程保存在 `trace.jsonl`、`stderr.log` 和 `response.md`，执行状态在 `execution.json`。成功退出后运行外部验收，结果在 `grade.json` 和 `grade.log`。runner 成功退出不等于任务通过。退出码 0 表示验收通过，1 表示验收失败，2 表示运行器失败或明确的环境受阻。缺少评分器运行条件也返回 2。
+
+### 复跑两阶段冷接手
+
+用同一份 runner 配置运行下面两组。将 `<trial>` 替换为系统临时目录下的新路径，将 `<runner.json>` 替换为上面配置的路径，固定 CLI 版本和模型。runner 每次启动都须创建新会话，能将最终答复写入 `{response}`。配置只放参数和环境说明，凭据由宿主管理。
+
+支持 MXC 的 Windows 机器可使用 [本轮配置](runners/codex-windows-mxc.json)。先用 `codex --version` 核对可执行文件，在合成项目内运行 `codex -c windows.sandbox=mxc sandbox --include-managed-config --permission-profile :workspace -- cmd.exe /d /c type AGENTS.md` 确认沙箱可读项目入口。配置里的 `codex` 由 PATH 解析；有多个版本时可在本地副本中填写所选可执行文件的绝对路径。
+
+```sh
+python evals/run.py prepare --case drift-cli --variant baseline --trial <trial>/baseline
+python evals/run.py prepare --case drift-cli --variant candidate --trial <trial>/candidate
+python evals/run.py run --trial <trial>/baseline --runner <runner.json>
+python evals/run.py run --trial <trial>/candidate --runner <runner.json>
+python evals/run.py report <trial>/baseline <trial>/candidate --output <trial>/report.json
+```
+
+每组的 A 和 B 是两个 runner 进程，各有独立的提示、答复、轨迹和执行状态，共用同一工作区。`--timeout` 按阶段计时。A 成功退出后，`A/workspace/` 保存交接时的项目文件，沿用 trial 快照对 Git 和构建缓存的排除规则。B 只接收续做提示。可对照快照与最终工作区，检查 B 的轨迹里是否有成功读取交接记录的命令。两阶段提示共同参与报告分组，完整 runner 配置保存在 trial 根目录。任一阶段运行失败即停止，两个阶段都成功退出后才做最终行为验收。
 
 Python 场景无需第三方包。Java 场景需要 JDK 17、Maven 或 Gradle，混合场景还需要 Node 22。可用 `EVAL_MAVEN`、`EVAL_GRADLE` 指定构建工具路径，`JAVA_HOME` 指定 JDK。构建依赖可能需要联网下载。应先在相同环境验证原始项目能够构建，再比较 AI 结果。被测程序删除文件、超时或输出错误属于任务失败。
 
