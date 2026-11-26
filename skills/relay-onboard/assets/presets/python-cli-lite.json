@@ -1,0 +1,25 @@
+{
+  "name": "python-cli-lite",
+  "description": "Python 3.9+ 标准库 CLI，轻量流程，默认 unittest。",
+  "stack": "python",
+  "runtime": {
+    "python": "3.9"
+  },
+  "build": {
+    "tool": "stdlib",
+    "working_directory": ".",
+    "commands": {
+      "test": "python -B -m unittest discover -s tests"
+    }
+  },
+  "conventions": {
+    "language": "zh",
+    "strictness": "light",
+    "design_dir": "docs/design",
+    "third_party_dependencies": false
+  },
+  "questions": [
+    "是否需要引入第三方依赖？",
+    "是否已有项目规定的 Python 版本或虚拟环境？"
+  ]
+}

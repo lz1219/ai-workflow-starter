@@ -1,6 +1,7 @@
 import importlib.util
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -9,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "skills/project-onboard/scripts/workflow_update.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "skills/relay-onboard/scripts/workflow_update.py"
 spec = importlib.util.spec_from_file_location("workflow_update", SCRIPT)
 updater = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(updater)
@@ -30,12 +31,18 @@ class WorkflowUpdateTests(unittest.TestCase):
         self.git("config", "core.autocrlf", "false")
         self.git("remote", "add", "origin", "https://example.invalid/workflow.git")
         self.upstream = self.source / "skills/example"
-        self.upstream.mkdir(parents=True)
+        (self.upstream / "assets").mkdir(parents=True)
+        (self.upstream / "assets" / "template.md").write_bytes(b"template\n")
         self.installed = self.project / ".agents/skills/example"
         self.installed.mkdir(parents=True)
-        for name, data in {"SKILL.md": b"---\nname: example\n---\nv1\n", "old.md": b"old\n", "custom.md": b"base\n"}.items():
-            (self.upstream / name).write_bytes(data)
-            (self.installed / name).write_bytes(data)
+        for name, data in {"SKILL.md": b"---\nname: example\n---\nv1\n", "old.md": b"old\n",
+                           "custom.md": b"base\n", "assets/template.md": b"template\n"}.items():
+            source_path = self.upstream / name
+            installed_path = self.installed / name
+            source_path.parent.mkdir(parents=True, exist_ok=True)
+            installed_path.parent.mkdir(parents=True, exist_ok=True)
+            source_path.write_bytes(data)
+            installed_path.write_bytes(data)
         self.old = self.commit()
         checks = self.root / "checks.json"
         checks.write_text(json.dumps([{"cwd": ".", "argv": ["{python}", "-c", "pass"]}]), encoding="utf-8")
@@ -296,7 +303,10 @@ class WorkflowUpdateTests(unittest.TestCase):
     def test_install_preview_and_apply_register_exact_git_bytes_and_keep_project_rules(self):
         (self.project / updater.MANIFEST).unlink()
         for path in self.installed.iterdir():
-            path.unlink()
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
         (self.project / "AGENTS.md").write_bytes(b"Existing team rules.\n")
         before = self.snapshot()
         checks = self.root / "checks.json"
@@ -319,7 +329,10 @@ class WorkflowUpdateTests(unittest.TestCase):
     def test_install_failure_restores_project_instructions_and_missing_manifest(self):
         (self.project / updater.MANIFEST).unlink()
         for path in self.installed.iterdir():
-            path.unlink()
+            if path.is_dir():
+                shutil.rmtree(path)
+            else:
+                path.unlink()
         (self.project / "AGENTS.md").write_bytes(b"keep these rules\n")
         checks = self.root / "bad-checks.json"
         checks.write_text(json.dumps([{"cwd": ".", "argv": ["{python}", "-c", "raise SystemExit(9)"]}]), encoding="utf-8")
@@ -334,6 +347,122 @@ class WorkflowUpdateTests(unittest.TestCase):
         before = self.snapshot()
         result = self.run_update("--install", "example", "--checks-file", str(self.root / "checks.json"))
         self.assertEqual(result.returncode, 1)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_overlay_registration_tracks_upstream_sections(self):
+        (self.upstream / "SKILL.md").write_text(
+            "---\nname: example\n---\n\n## 使用\n\nv2\n", encoding="utf-8"
+        )
+        revision = self.commit()
+        updated = self.run_update("--apply", "--revision", revision)
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+
+        overlay = self.project / ".ai-workflow/overlays/example.md"
+        overlay.parent.mkdir(parents=True)
+        overlay.write_text(
+            "---\ntarget: example\ncovers:\n  - SKILL.md#使用\n---\n\n# 团队覆盖\n",
+            encoding="utf-8",
+        )
+        registered = self.run_update("--register-layer", "overlay", ".ai-workflow/overlays/example.md")
+        self.assertEqual(registered.returncode, 0, registered.stderr)
+        self.assertEqual(self.manifest()["layers"][0]["covers"], ["SKILL.md#使用"])
+        self.assertEqual(self.run_update("--doctor").returncode, 0)
+
+        (self.upstream / "SKILL.md").write_text(
+            "---\nname: example\n---\n\n## 用法\n\nv3\n", encoding="utf-8"
+        )
+        revision = self.commit()
+        updated = self.run_update("--apply", "--revision", revision)
+        self.assertEqual(updated.returncode, 0, updated.stderr)
+        self.assertIn("# 团队覆盖", overlay.read_text(encoding="utf-8"))
+        drifted = self.run_update("--doctor")
+        self.assertEqual(drifted.returncode, 1, drifted.stdout)
+        self.assertIn("covered section no longer exists", drifted.stdout)
+
+        removed = self.run_update("--unregister-layer", ".ai-workflow/overlays/example.md")
+        self.assertEqual(removed.returncode, 0, removed.stderr)
+        self.assertEqual(self.run_update("--doctor").returncode, 0)
+
+    def test_preset_and_extension_layers_are_validated(self):
+        preset = self.project / ".ai-workflow/presets/team.json"
+        preset.parent.mkdir(parents=True)
+        preset.write_text(json.dumps({
+            "name": "team", "stack": "python", "runtime": {"python": "3.9"},
+            "build": {"commands": {"test": "python -m unittest"}}, "conventions": {},
+        }), encoding="utf-8")
+        extension = self.project / ".ai-workflow/extensions/db/SKILL.md"
+        extension.parent.mkdir(parents=True)
+        extension.write_text("---\nname: db\ndescription: Database helper\n---\n", encoding="utf-8")
+
+        for kind, path in (
+            ("preset", ".ai-workflow/presets/team.json"),
+            ("extension", ".ai-workflow/extensions/db"),
+        ):
+            result = self.run_update("--register-layer", kind, path)
+            self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertEqual(self.run_update("--doctor").returncode, 0)
+
+        preset.write_text("[]", encoding="utf-8")
+        broken = self.run_update("--doctor")
+        self.assertEqual(broken.returncode, 1, broken.stdout)
+        self.assertIn("preset", broken.stdout)
+
+    def test_remove_deletes_untouched_skill_and_keeps_project_docs(self):
+        docs = self.project / "AGENTS.md"
+        docs.write_bytes(b"team rules\n")
+        result = self.run_update("--remove", "example")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertFalse((self.project / ".agents/skills/example").exists())
+        self.assertEqual(self.manifest()["skills"], {})
+        self.assertEqual(docs.read_bytes(), b"team rules\n")
+
+    def test_remove_refuses_unknown_files_in_skill_directory(self):
+        (self.installed / "local.md").write_bytes(b"unregistered local file\n")
+        before = self.snapshot()
+        result = self.run_update("--remove", "example")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("unregistered", result.stderr)
+        self.assertEqual(self.snapshot(), before)
+    def test_remove_refuses_unknown_directories_in_skill_directory(self):
+        (self.installed / "notes").mkdir()
+        (self.installed / "notes" / "keep.txt").write_bytes(b"keep me\n")
+        before = self.snapshot()
+        result = self.run_update("--remove", "example")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("unregistered", result.stderr)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_remove_refuses_local_customization(self):
+        (self.installed / "custom.md").write_bytes(b"team edit\n")
+        before = self.snapshot()
+        result = self.run_update("--remove", "example")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("local changes", result.stderr)
+        self.assertEqual(self.snapshot(), before)
+
+    def test_install_maps_legacy_name_to_current_skill(self):
+        legacy = self.source / "skills/relay-onboard"
+        legacy.mkdir()
+        (legacy / "SKILL.md").write_text("---\nname: relay-onboard\n---\nv1\n", encoding="utf-8")
+        self.commit()
+        result = self.run_update("--install", "project-onboard")
+        self.assertEqual(result.returncode, 0, result.stderr)
+        self.assertTrue((self.project / ".agents/skills/relay-onboard/SKILL.md").is_file())
+        self.assertIn("relay-onboard", self.manifest()["skills"])
+        self.assertNotIn("project-onboard", self.manifest()["skills"])
+
+    def test_update_refuses_legacy_manifest_until_migrated(self):
+        moved = self.project / ".agents/skills/project-onboard"
+        self.installed.rename(moved)
+        manifest = self.manifest()
+        entry = manifest["skills"].pop("example")
+        entry["target"] = ".agents/skills/project-onboard"
+        manifest["skills"]["project-onboard"] = entry
+        (self.project / updater.MANIFEST).write_bytes(updater.json_bytes(manifest))
+        before = self.snapshot()
+        result = self.run_update("--apply")
+        self.assertEqual(result.returncode, 1)
+        self.assertIn("Legacy skill names", result.stderr)
         self.assertEqual(self.snapshot(), before)
 
     def test_doctor_distinguishes_customizations_missing_files_and_interruption(self):

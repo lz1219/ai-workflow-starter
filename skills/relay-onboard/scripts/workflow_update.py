@@ -22,6 +22,12 @@ import tempfile
 MANIFEST = ".ai-workflow.json"
 JOURNAL = ".ai-workflow-transaction.json"
 ENTRY_MARKER = "<!-- ai-workflow -->"
+LEGACY_NAMES = {"project-onboard": "relay-onboard", "change-design": "relay-change"}
+LAYER_PREFIX = {
+    "overlay": ".ai-workflow/overlays/",
+    "preset": ".ai-workflow/presets/",
+    "extension": ".ai-workflow/extensions/",
+}
 
 
 def check_executable(cwd, executable):
@@ -44,6 +50,221 @@ def run_checks(project, checks):
                                 env={**os.environ, "PYTHONIOENCODING": "utf-8"})
         if result.returncode:
             raise ValueError(f"Validation failed with exit code {result.returncode}")
+
+
+def front_matter(text):
+    """Read the small YAML subset used by SKILL.md and overlay files."""
+    lines = text.replace("\r\n", "\n").splitlines()
+    if not lines or lines[0].strip() != "---":
+        raise ValueError("Missing front matter")
+    try:
+        end = lines.index("---", 1)
+    except ValueError:
+        raise ValueError("Unclosed front matter") from None
+    metadata = {}
+    current = None
+    for line in lines[1:end]:
+        if not line.strip() or line.lstrip().startswith("#"):
+            continue
+        if line[0] in " \t" and line.strip().startswith("- "):
+            if current is None:
+                raise ValueError("List item without a key in front matter")
+            metadata.setdefault(current, [])
+            if not isinstance(metadata[current], list):
+                metadata[current] = []
+            metadata[current].append(line.strip()[2:].strip().strip("\"'"))
+            continue
+        key, separator, value = line.partition(":")
+        if not separator:
+            raise ValueError(f"Invalid front matter line: {line}")
+        current = key.strip()
+        value = value.strip()
+        if value.startswith("[") and value.endswith("]"):
+            metadata[current] = [item.strip().strip("\"'") for item in value[1:-1].split(",") if item.strip()]
+        else:
+            metadata[current] = value.strip("\"'") if value else []
+    return metadata
+
+
+def headline_set(path):
+    text = path.read_text(encoding="utf-8-sig")
+    return {
+        re.sub(r"\s+#+\s*$", "", match.group(1)).strip()
+        for match in re.finditer(r"(?m)^#{1,6}\s+(.+?)\s*$", text)
+    }
+
+
+def layer_problems(project, manifest, layer):
+    """Validate one registered layer against the current project."""
+    problems = []
+    kind = layer["kind"]
+    path = safe_path(project, layer["path"])
+    if not path.exists():
+        return [f"{layer['path']}: layer path is missing"]
+    if kind == "overlay":
+        if not path.is_file():
+            return [f"{layer['path']}: overlay must be a file"]
+        entry = manifest["skills"].get(layer.get("target"))
+        if entry is None:
+            return [f"{layer['path']}: overlay target is not installed: {layer.get('target')}"]
+        for cover in layer.get("covers", []):
+            file, _, heading = cover.partition("#")
+            if not file:
+                problems.append(f"{layer['path']}: invalid cover reference: {cover}")
+                continue
+            try:
+                document = safe_path(project, entry["target"] + "/" + file)
+            except ValueError as error:
+                problems.append(f"{layer['path']}: {error}")
+                continue
+            if not document.is_file():
+                problems.append(f"{layer['path']}: covered file is missing: {cover}")
+            elif heading and heading not in headline_set(document):
+                problems.append(
+                    f"{layer['path']}: covered section no longer exists in the upstream skill: {cover}"
+                )
+    elif kind == "preset":
+        if not path.is_file():
+            return [f"{layer['path']}: preset must be a file"]
+        try:
+            data = json.loads(path.read_text(encoding="utf-8-sig"))
+        except ValueError:
+            return [f"{layer['path']}: preset is not valid JSON"]
+        problems.extend(preset_problems(data, layer["path"]))
+    else:
+        if not path.is_dir():
+            return [f"{layer['path']}: extension must be a directory"]
+        skill = path / "SKILL.md"
+        if not skill.is_file():
+            return [f"{layer['path']}: extension is missing SKILL.md"]
+        try:
+            metadata = front_matter(skill.read_text(encoding="utf-8-sig"))
+        except ValueError as error:
+            return [f"{layer['path']}: {error}"]
+        if metadata.get("name") != path.name:
+            problems.append(f"{layer['path']}: extension name must match its directory: {path.name}")
+        if not str(metadata.get("description", "")).strip():
+            problems.append(f"{layer['path']}: extension description is empty")
+    return problems
+
+
+def preset_problems(data, label):
+    problems = []
+    if not isinstance(data, dict):
+        return [f"{label}: preset must be a JSON object"]
+    for key in ("name", "stack", "runtime", "build", "conventions"):
+        if key not in data:
+            problems.append(f"{label}: preset is missing {key}")
+    build = data.get("build")
+    if not isinstance(build, dict) or not isinstance(build.get("commands"), dict) or not build["commands"]:
+        problems.append(f"{label}: preset build.commands must be a nonempty object")
+    return problems
+
+
+def add_layer(project, manifest, kind, relative):
+    if kind not in LAYER_PREFIX:
+        raise ValueError("Layer kind must be overlay, preset or extension")
+    relative = relative.replace("\\", "/")
+    if not relative.startswith(LAYER_PREFIX[kind]):
+        raise ValueError(f"{kind} must live under {LAYER_PREFIX[kind]}")
+    path = safe_path(project, relative)
+    if not path.exists():
+        raise ValueError(f"Layer path does not exist: {relative}")
+    entry = {"kind": kind, "path": relative}
+    if kind == "overlay":
+        if not path.is_file():
+            raise ValueError("Overlay must be a file")
+        metadata = front_matter(path.read_text(encoding="utf-8-sig"))
+        target = metadata.get("target")
+        if not isinstance(target, str) or target not in manifest["skills"]:
+            raise ValueError("Overlay front matter target must name an installed skill")
+        covers = metadata.get("covers", [])
+        if isinstance(covers, str):
+            covers = [covers]
+        if not isinstance(covers, list) or any(not isinstance(item, str) or not item for item in covers):
+            raise ValueError("Overlay covers must be a list of file or file#section references")
+        entry.update(target=target, covers=covers)
+    problems = layer_problems(project, manifest, entry)
+    if problems:
+        raise ValueError("Layer is not valid:\n" + "\n".join(problems))
+    layers = manifest.setdefault("layers", [])
+    manifest["layers"] = [item for item in layers if item.get("path") != relative] + [entry]
+    return entry
+
+
+def remove_skills(project, names):
+    manifest_path = safe_path(project, MANIFEST)
+    before_manifest = file_bytes(manifest_path)
+    if before_manifest is None:
+        raise ValueError("No installation manifest")
+    manifest = json.loads(before_manifest)
+    validate_manifest(project, manifest)
+    changes = []
+    targets = []
+    for name in names:
+        entry = manifest["skills"].get(name)
+        if entry is None:
+            raise ValueError(f"Skill is not registered: {name}")
+        if any(layer.get("target") == name for layer in manifest.get("layers", [])):
+            raise ValueError(f"Unregister overlays that target {name} before removing it")
+        modified = [
+            path for path, expected in entry["files"].items()
+            if digest(file_bytes(safe_path(project, entry["target"] + "/" + path))) != expected
+        ]
+        if modified:
+            raise ValueError(
+                f"{name} has local changes; move them to an overlay before removing: " + ", ".join(modified)
+            )
+        root = safe_path(project, entry["target"])
+        registered = {Path(path).as_posix() for path in entry["files"]}
+        parent_dirs = {
+            parent.as_posix()
+            for path in registered
+            for parent in Path(path).parents
+            if parent != Path(".")
+        }
+        unknown = []
+        if root.exists():
+            for child in root.rglob("*"):
+                relative = child.relative_to(root).as_posix()
+                if child.is_symlink() or (
+                    child.is_file() and relative not in registered
+                ) or (
+                    child.is_dir() and relative not in parent_dirs
+                    and registered and not any(
+                        item.startswith(relative + "/") for item in registered
+                    )
+                ):
+                    unknown.append(relative)
+        if unknown:
+            raise ValueError(
+                f"{name} has unregistered files; move or remove them before removing the skill: "
+                + ", ".join(sorted(unknown))
+            )
+        for path in entry["files"]:
+            relative = entry["target"] + "/" + path
+            changes.append({"path": relative, "before": pack(file_bytes(safe_path(project, relative))), "after": None})
+        manifest["skills"].pop(name)
+        manifest["checks"] = [
+            check for check in manifest["checks"]
+            if entry["target"] not in " ".join(check["argv"])
+        ]
+        targets.append(entry["target"])
+    changes.append({"path": MANIFEST, "before": pack(before_manifest), "after": pack(json_bytes(manifest))})
+    apply_changes(project, changes, [])
+    for target in targets:
+        prune_empty(safe_path(project, target))
+    print(f"Removed {', '.join(names)}. Project documents and layers were left unchanged.")
+
+
+def prune_empty(path):
+    if not path.is_dir():
+        return
+    for child in sorted(path.rglob("*"), key=lambda item: len(item.parts), reverse=True):
+        if child.is_dir() and not any(child.iterdir()):
+            child.rmdir()
+    if not any(path.iterdir()):
+        path.rmdir()
 
 
 def doctor(project):
@@ -73,6 +294,15 @@ def doctor(project):
                 report["errors"].append(f"{name}: missing installed files")
             if modified:
                 report["warnings"].append(f"{name}: local customization detected; review during update")
+            if name in LEGACY_NAMES:
+                report["warnings"].append(
+                    f"{name}: legacy name; install {LEGACY_NAMES[name]} and run --remove {name} to migrate"
+                )
+        report["layers"] = {}
+        for layer in manifest.get("layers", []):
+            problems = layer_problems(project, manifest, layer)
+            report["layers"][layer["path"]] = {"kind": layer["kind"], "problems": problems}
+            report["errors"].extend(problems)
         if not manifest["checks"]:
             report["errors"].append("No validation commands configured")
         for check in manifest["checks"]:
@@ -129,12 +359,12 @@ def install(project, source, revision, manifest, before_manifest, args):
         manifest["skills"][name] = {"target": target, "revision": revision,
                                      "files": {path: digest(data) for path, data in files.items()}}
         # These are workflow smoke checks, never a claim of business acceptance.
-        smoke = {"change-design": "requirements.py", "project-onboard": "maven_preflight.py"}.get(name)
+        smoke = {"relay-change": "requirements.py", "relay-onboard": "maven_preflight.py"}.get(name)
         if smoke and f"scripts/{smoke}" in files:
             check = {"cwd": ".", "argv": ["{python}", "-B", target + "/scripts/" + smoke, "--help"], "timeout": 120}
             if check not in manifest["checks"]:
                 manifest["checks"].append(check)
-        if name == "change-design":
+        if name == "relay-change":
             board = file_bytes(safe_path(project, "docs/design/README.md")) or b""
             if "由各需求的 `design.md` 和 `tasks.md` 生成。".encode() in board:
                 manifest["checks"].append({"cwd": ".", "argv": ["{python}", "-B", target + "/scripts/requirements.py", "--check"], "timeout": 120})
@@ -149,7 +379,7 @@ def install(project, source, revision, manifest, before_manifest, args):
             continue
         body = ("\n" + ENTRY_MARKER + "\n## AI 工作流\n\n"
                 "安装位置、源版本与检查命令见 `.ai-workflow.json`。按任务需要读取其中登记的 Skill。\n"
-                "局部修复保留简短计划和验证记录；若清单启用 change-design，需要独立设计时读取其约定。\n"
+                "局部修复保留简短计划和验证记录；若清单启用 relay-change，需要独立设计时读取其约定。\n"
                 "收到“检查工作流”或“更新工作流”时，从登记上游的独立副本使用 workflow_update.py，\n"
                 "先运行 --doctor；更新先预览确定提交，确认无冲突后按已授权范围应用并验证。\n"
                 "<!-- /ai-workflow -->\n") if relative == "AGENTS.md" else "\n" + ENTRY_MARKER + "\n@AGENTS.md\n<!-- /ai-workflow -->\n"
@@ -305,6 +535,33 @@ def validate_manifest(project, manifest):
             raise ValueError("Checks require a nonempty argv array")
         if not isinstance(check.get("timeout", 120), int) or check.get("timeout", 120) <= 0:
             raise ValueError("Check timeout must be a positive number of seconds")
+    layers = manifest.get("layers", [])
+    if not isinstance(layers, list):
+        raise ValueError("Invalid layer list")
+    seen = set()
+    for layer in layers:
+        if not isinstance(layer, dict):
+            raise ValueError("Invalid layer entry")
+        kind = layer.get("kind")
+        if kind not in LAYER_PREFIX:
+            raise ValueError("Layer kind must be overlay, preset or extension")
+        path = layer.get("path")
+        if not isinstance(path, str) or "\\" in path or not path.startswith(LAYER_PREFIX[kind]):
+            raise ValueError(f"Layer path must live under {LAYER_PREFIX[kind]}")
+        if path in seen:
+            raise ValueError(f"Duplicate layer path: {path}")
+        seen.add(path)
+        safe_path(project, path)
+        if kind == "overlay":
+            target = layer.get("target")
+            if not isinstance(target, str) or target not in manifest["skills"]:
+                raise ValueError("Overlay target must name an installed skill")
+            covers = layer.get("covers", [])
+            if not isinstance(covers, list) or any(not isinstance(item, str) or not item for item in covers):
+                raise ValueError("Overlay covers must be a list of references")
+        else:
+            if "target" in layer or "covers" in layer:
+                raise ValueError(f"{kind} layers do not take target or covers")
 
 
 def pack(data):
@@ -374,6 +631,31 @@ def run(args):
         return
     if safe_path(project, JOURNAL).exists():
         raise ValueError("Unfinished update detected. Run --rollback before another update.")
+    if args.remove:
+        remove_skills(project, args.remove)
+        return
+    if args.register_layer or args.unregister_layer:
+        manifest_path = safe_path(project, MANIFEST)
+        before_manifest = file_bytes(manifest_path)
+        if before_manifest is None:
+            raise ValueError("No installation manifest; install or register a skill first")
+        manifest = json.loads(before_manifest)
+        validate_manifest(project, manifest)
+        if args.register_layer:
+            kind, relative = args.register_layer
+            entry = add_layer(project, manifest, kind, relative.replace("\\", "/"))
+            print(f"Registered {kind}: {entry['path']}")
+        else:
+            relative = args.unregister_layer.replace("\\", "/")
+            layers = manifest.get("layers", [])
+            remaining = [layer for layer in layers if layer["path"] != relative]
+            if len(remaining) == len(layers):
+                raise ValueError(f"Layer is not registered: {relative}")
+            manifest["layers"] = remaining
+            print(f"Unregistered layer: {relative}")
+        validate_manifest(project, manifest)
+        write_file(manifest_path, json_bytes(manifest))
+        return
     if args.source is None:
         raise ValueError("Supply --source pointing to the trusted upstream Git checkout")
     source = args.source.resolve()
@@ -391,6 +673,12 @@ def run(args):
     if args.install:
         if len(set(args.install)) != len(args.install) or (args.target and len(args.install) != 1):
             raise ValueError("Use distinct skill names; --target requires exactly one skill")
+        mapped = [LEGACY_NAMES.get(name, name) for name in args.install]
+        if mapped != args.install:
+            print("NOTE legacy skill name mapped to " + ", ".join(mapped))
+        args.install = mapped
+        if len(set(args.install)) != len(args.install):
+            raise ValueError("Legacy and current names map to the same skill")
         install(project, source, revision, manifest, before_manifest, args)
         return
     if args.register:
@@ -413,6 +701,12 @@ def run(args):
         return
     if args.target or args.checks_file:
         raise ValueError("--target and --checks-file require --register")
+    legacy = sorted(name for name in manifest["skills"] if name in LEGACY_NAMES)
+    if legacy:
+        raise ValueError(
+            "Legacy skill names need migration: install relay-onboard and relay-change, "
+            "then run --remove " + " ".join(legacy)
+        )
     if not manifest["skills"]:
         raise ValueError("No registered skills; register the exact installed baseline first")
     changes = []
@@ -463,6 +757,11 @@ def main():
     mode.add_argument("--apply", action="store_true")
     mode.add_argument("--rollback", action="store_true")
     mode.add_argument("--install", nargs="+", metavar="SKILL")
+    mode.add_argument("--remove", nargs="+", metavar="SKILL",
+                      help="Remove registered skills whose files are unmodified")
+    mode.add_argument("--register-layer", nargs=2, metavar=("KIND", "PATH"),
+                      help="Register an overlay, preset or extension for --doctor checks")
+    mode.add_argument("--unregister-layer", metavar="PATH", help="Remove a registered layer entry")
     mode.add_argument("--doctor", action="store_true", help="Inspect installation offline without executing checks")
     parser.add_argument("--tool", choices=("codex", "claude"), default="codex")
     parser.add_argument("--dry-run", action="store_true", help="Preview installation; updates preview by default")

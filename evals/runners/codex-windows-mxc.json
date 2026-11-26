@@ -1,0 +1,10 @@
+{
+  "label": "codex-mxc-sol",
+  "environment": "Windows, codex-cli 0.172.0, gpt-6.2-sol low, workspace-write MXC, ephemeral, ignore-user-config",
+  "argv": [
+    "codex", "exec", "--ephemeral", "--ignore-user-config", "--json",
+    "--sandbox", "workspace-write", "-c", "windows.sandbox=\"mxc\"",
+    "-m", "gpt-6.2-sol", "-c", "model_reasoning_effort=\"low\"",
+    "-C", "{workspace}", "-o", "{response}", "-"
+  ]
+}

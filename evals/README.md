@@ -11,6 +11,25 @@
 | cold-handoff-cli | 从原任务续做，保留现行的大小写规则和历史证据，留下与当前代码一致且可定位的验证回执 |
 | maven-spring | 通过真实 Spring MockMvc 验证计数、筛选和非法参数 |
 | gradle-node | 后端 HTTP 验证，并启动真实应用核对 Node 消费端筛选与错误处理 |
+| design-review | 语义评审，由评审者按判据判定；`grade` 返回 `environment_error`，不自动评分 |
+| claim-check-cli | 行为验收加任务回写是否与实际结果一致（用于规则消融） |
+| gate-check-cli | 自带检查不覆盖某条验收项时，外部验收能否发现漏项（用于规则消融） |
+| drift-cli | 两阶段：A 交付一半，B 冷接手；外部验收核对是否保持已交付的导入顺序（用于跨会话对照） |
+| quarter-handoff | 交接清单是否准确记录两份报表的实报月、缺报月，并保留已发布报表。两份的合计和平均相同。 |
+
+## DeepSeek 接手入口
+
+2026-11-24 交接。评测实现位于 `codex/first-ab-evidence` 分支的 `d0b40bc`。在源仓库根目录运行 `git merge-base --is-ancestor d0b40bc HEAD`，退出码 0 表示当前检出已包含这批实现。该提交增加了两阶段运行、Windows MXC runner 配置和月份回写场景。全量回归命令为 `python -X utf8 -B -m unittest discover -s tests`，交付时 53 项通过。
+
+| 接手时要核对的问题 | 从哪里核对 |
+| --- | --- |
+| 上轮 DeepSeek 已经测了什么？ | 11 月 23 日的五组对照共 36 次运行，使用派生会话，缺少原始读取轨迹。场景、分组与证据边界见[历史记录](VALIDATION.md)。 |
+| Codex 补齐了哪段证据？ | 11 月 24 日用 `gpt-6.2-sol` 跑通一对真实 A → B。先看 `stage-a-audit.json` 核对 A 交付的行为，再看两组 `B/trace.jsonl` 核对 B 读到的规则，最后看 `drift-report.json` 核对最终验收和早先受阻的试验。原始文件的位置见[本轮记录](VALIDATION.md#2026-11-24--带轨迹的冷接手与月份回写复测)。 |
+| 为什么保留现有 Skill？ | 评分器能检出把“仅二月上报”写成“二月缺报”的历史错误。给出逐月 CSV 明细后，基线和候选各 3/3 通过。工作簿交接的原始错误与本次合成任务的可见信息不同。六次结果汇总在同一试验目录的 `quarter-report.json`。 |
+
+**下一步取决于要验证的问题。** 若要补 DeepSeek 自身的冷接手轨迹，先确认其运行器能从 stdin 接收任务、每次创建新会话、写出最终答复和可核查的工具轨迹，再按[两阶段复跑步骤](#复跑两阶段冷接手)做一对。仓库内已实测的 MXC 配置调用的是 Codex；DeepSeek 的新结果应单独记录模型路由和 runner 版本。
+
+若重点是找出真实交接为何写反月份，优先对照接手者当时看到的汇总、可访问的工作簿和最终任务文字。先确认基线在哪种材料条件下会重现错误，再决定是否调整 `relay-change`。新的观察追加到验证记录，注明可复核的试验、环境和未验证项。[11 月 19 日原稿与复查路径](VALIDATION.md#只在任务内增加回写提示--2026-11-19)
 
 ## 准备试验
 
@@ -45,6 +64,22 @@ python evals/run.py run --trial <试验目录> --runner <runner.json> --timeout 
 
 原始过程保存在 `trace.jsonl`、`stderr.log` 和 `response.md`，执行状态在 `execution.json`。成功退出后运行外部验收，结果在 `grade.json` 和 `grade.log`。runner 成功退出不等于任务通过。退出码 0 表示验收通过，1 表示验收失败，2 表示运行器失败或明确的环境受阻。缺少评分器运行条件也返回 2。
 
+### 复跑两阶段冷接手
+
+用同一份 runner 配置运行下面两组。将 `<trial>` 替换为系统临时目录下的新路径，将 `<runner.json>` 替换为上面配置的路径，固定 CLI 版本和模型。runner 每次启动都须创建新会话，能将最终答复写入 `{response}`。配置只放参数和环境说明，凭据由宿主管理。
+
+支持 MXC 的 Windows 机器可使用 [本轮配置](runners/codex-windows-mxc.json)。先用 `codex --version` 核对可执行文件，在合成项目内运行 `codex -c windows.sandbox=mxc sandbox --include-managed-config --permission-profile :workspace -- cmd.exe /d /c type AGENTS.md` 确认沙箱可读项目入口。配置里的 `codex` 由 PATH 解析；有多个版本时可在本地副本中填写所选可执行文件的绝对路径。
+
+```sh
+python evals/run.py prepare --case drift-cli --variant baseline --trial <trial>/baseline
+python evals/run.py prepare --case drift-cli --variant candidate --trial <trial>/candidate
+python evals/run.py run --trial <trial>/baseline --runner <runner.json>
+python evals/run.py run --trial <trial>/candidate --runner <runner.json>
+python evals/run.py report <trial>/baseline <trial>/candidate --output <trial>/report.json
+```
+
+每组的 A 和 B 是两个 runner 进程，各有独立的提示、答复、轨迹和执行状态，共用同一工作区。`--timeout` 按阶段计时。A 成功退出后，`A/workspace/` 保存交接时的项目文件，沿用 trial 快照对 Git 和构建缓存的排除规则。B 只接收续做提示。可对照快照与最终工作区，检查 B 的轨迹里是否有成功读取交接记录的命令。两阶段提示共同参与报告分组，完整 runner 配置保存在 trial 根目录。任一阶段运行失败即停止，两个阶段都成功退出后才做最终行为验收。
+
 Python 场景无需第三方包。Java 场景需要 JDK 17、Maven 或 Gradle，混合场景还需要 Node 22。可用 `EVAL_MAVEN`、`EVAL_GRADLE` 指定构建工具路径，`JAVA_HOME` 指定 JDK。构建依赖可能需要联网下载。应先在相同环境验证原始项目能够构建，再比较 AI 结果。被测程序删除文件、超时或输出错误属于任务失败。
 
 ## 评分与比较
@@ -74,3 +109,12 @@ python evals/run.py report <基线试验目录> <候选试验目录> --output <�
 2. 开启独立会话，由实际工作区开始。同一个任务可交换两组执行顺序，按既有评测方法重复。检查定位、命令选择、实际结果、回写及历史行为是否保留。
 3. 环境受阻时仍可单独验证工程可运行性，或比较会话根据两组文档材料作出的判断。工程执行、材料判断与完整接手各自记录。能选对命令只支持判断层面的结论。
 4. 对照结果用于决定保留、移动或简化该内容。如果收益集中在一条信息，可以再测一次，只把这条信息移入现有规范或任务。样例和次数有限时，把结论限于本次观察。
+
+## 决定接力与触发评测
+
+两条独立流程，用于回答现有场景覆盖不到的问题：
+
+- [决定接力](decision_relay/README.md)：固定 A 状态，B 改动报表舍入，C 改回并保留历史。评分器检查发票与共享函数未被连带修改、B 快照确实使用 half-even、历史只追加。`calibrate` 用四份手写实现证明评分器能区分对错，不通过就不要花模型运行。`run` 使用与其他评测相同的 runner 配置；测试里用脚本化 runner 验证了正确的 B/C 会通过、直接改共享函数的做法会失败。它尚未接入 `run.py report` 的分组统计。
+- 触发评测：`evals/trigger_cases.jsonl` 是带标注的中文请求集，用 `skills/relay-onboard/scripts/trigger_eval.py` 对实际路由结果计算精确率、召回率和误判。可用 `--predict-command` 或 `--predict-argv` 让本机路由器逐条回答，或用 `--predictions` 读取轨迹导出的结果；同一批 utterance 一一对应。没有模型时可用 `evals/baselines/keyword_router.py` 复现关键词基线，它只验证管线和数据，不代表真实技能路由。没有真实预测时只校验用例，不宣称通过。
+
+两项都不能替代行为验收或整体质量结论。前者的价值在于范围与历史是否守住，后者的价值在于描述是否既可被找到又不过度触发。

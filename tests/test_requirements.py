@@ -6,7 +6,7 @@ import tempfile
 import unittest
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "skills/change-design/scripts/requirements.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "skills/relay-change/scripts/requirements.py"
 
 
 class RequirementsTests(unittest.TestCase):
