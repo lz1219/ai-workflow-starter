@@ -25,6 +25,7 @@ related: []
 | 编号 | 场景与触发条件 | 预期结果 |
 |---|---|---|
 | AC-1 | 正常导出 | 下载文件 |
+| AC-2 | 上线前对账 | CSV 与台账一致 |
 
 ## 2. 现状与技术方案
 
@@ -34,7 +35,7 @@ related: []
 
 | 验收项 | 验证安排 | 任务或证据链接 |
 |---|---|---|
-| AC-1 | 单元测试 | T1 |
+| AC-2 | 用脱敏台账手工核对 | — |
 """
 
 TASKS = """# 任务看板
@@ -93,7 +94,7 @@ class CiGateTests(unittest.TestCase):
             env={**os.environ, "PYTHONIOENCODING": "utf-8"},
         )
 
-    def test_complete_requirement_passes(self):
+    def test_task_and_legacy_verification_table_cover_distinct_criteria(self):
         result = self.run_gate("--base", "HEAD", "--all")
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertIn("均通过", result.stdout)
@@ -101,8 +102,8 @@ class CiGateTests(unittest.TestCase):
     def test_uncovered_acceptance_item_fails(self):
         design = (self.requirement / "design.md").read_text(encoding="utf-8")
         design = design.replace(
-            "| AC-1 | 正常导出 | 下载文件 |",
-            "| AC-1 | 正常导出 | 下载文件 |\n| AC-2 | 空结果 | 只含表头 |",
+            "| AC-2 | 上线前对账 | CSV 与台账一致 |",
+            "| AC-2 | 上线前对账 | CSV 与台账一致 |\n| AC-3 | 空结果 | 只含表头 |",
         )
         (self.requirement / "design.md").write_text(design, encoding="utf-8")
         refreshed = self.run_requirements("--write")
@@ -110,7 +111,7 @@ class CiGateTests(unittest.TestCase):
 
         result = self.run_gate("--base", "HEAD", "--all")
         self.assertEqual(result.returncode, 1, result.stdout + result.stderr)
-        self.assertIn("AC-2 缺少关联任务或验证安排", result.stdout)
+        self.assertIn("AC-3 缺少关联任务或验证安排", result.stdout)
 
     def test_changed_requirement_is_detected_from_working_tree(self):
         tasks = (self.requirement / "tasks.md").read_text(encoding="utf-8")
