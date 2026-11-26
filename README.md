@@ -1,8 +1,10 @@
-# AI 项目接入与需求设计
+# Relay：AI 项目接入与需求设计
 
 这个项目帮助开发者与 AI 一起设计软件，把讨论中确认的规则、理由和适用条件留在仓库。下一次改需求时，人可以找到原决定并修订它；换一个 AI 写代码时，它也能找到本项目的开发规范和上次做到哪里。
 
-`project-onboard` 帮团队从代码、配置和维护者的决定中整理开发指引。新老项目都先确认项目级约定，再按需补充模块差异。缺少明文规范时，AI 根据项目起草首版，由人确认后开发。`change-design` 帮人用具体场景讨论取舍，把共识写回原设计，再按项目规范实施，把实际结果留在原任务或 PR。小改动沿用已有记录。
+两个 Skill 合称 **Relay（接力）**：`relay-onboard` 负责接入、开发指引和工作流维护，`relay-change` 负责需求、设计、实施与验收。两个目录仍按职责分开，按需读取，避免把全部参考一次装进上下文。
+
+`relay-onboard` 帮团队从代码、配置和维护者的决定中整理开发指引。新老项目都先确认项目级约定，再按需补充模块差异。缺少明文规范时，AI 根据项目起草首版，由人确认后开发。`relay-change` 帮人用具体场景讨论取舍，把共识写回原设计，再按项目规范实施，把实际结果留在原任务或 PR。小改动沿用已有记录。
 
 第一次了解这套工作方式，可以读[一张季度月报的两轮设计](examples/quarterly-report/README.md)。从“把缺的月份补齐”到“领导想看出哪些月没报”，同一份设计记录两次决定，两个实际工作簿可以并排验收。
 
@@ -10,7 +12,7 @@
 
 | 现在要做什么 | 在目标项目里可以直接这样说 |
 | --- | --- |
-| 第一次接入已有项目 | “用 project-onboard 找到订单模块的入口和实际验证命令，沿用团队的开发说明。” |
+| 第一次接入已有项目 | “用 relay-onboard 找到订单模块的入口和实际验证命令，沿用团队的开发说明。” |
 | 改一个已有行为 | “导出应当只含当前筛选结果。先找对应需求，更新受影响的规则和验收。” |
 | 从中断处继续 | “接着做导出需求。核对原任务、当前改动和上次验证，完成下一个可验证的结果。” |
 | 更新项目里已登记的工作流 | “更新工作流，先预览本项目的定制和上游改动。” |
@@ -18,11 +20,13 @@
 已有可信的本仓库 Git 副本时，可以从目标项目根目录直接安装并登记版本：
 
 ```sh
-python <上游副本>/skills/project-onboard/scripts/workflow_update.py --source <上游副本> --revision <提交或标签> --install project-onboard change-design
-python <上游副本>/skills/project-onboard/scripts/workflow_update.py --doctor
+python <上游副本>/skills/relay-onboard/scripts/workflow_update.py --source <上游副本> --revision <提交或标签> --install relay-onboard relay-change
+python <上游副本>/skills/relay-onboard/scripts/workflow_update.py --doctor
 ```
 
-安装会保留已有项目指令，追加工作流入口，并配置基本检查。预览加 `--dry-run`，Claude Code 加 `--tool claude`。已有定制发生冲突时停止。详细行为见 [安装与更新](skills/project-onboard/references/workflow-update.md)。
+安装会保留已有项目指令，追加工作流入口，并配置基本检查。预览加 `--dry-run`，Claude Code 加 `--tool claude`。已有定制发生冲突时停止。详细行为见 [安装与更新](skills/relay-onboard/references/workflow-update.md)。
+
+2026-11-26 起两个 Skill 更名为 `relay-onboard` / `relay-change`。旧安装按新名安装后，可用 `--remove project-onboard change-design` 移除旧目录；`--doctor` 会提示旧名，旧名清单的更新会被拒绝，避免把新 front matter 写进旧目录。移除前要求技能文件未被本地修改，团队规则应先迁到覆盖层。
 
 上述命令已安装两个 Skill。若希望个人跨项目调用，也可以把需要的 Skill 整个目录复制到对应工具的个人技能目录。
 
@@ -31,18 +35,18 @@ python <上游副本>/skills/project-onboard/scripts/workflow_update.py --doctor
 | Codex | `~/.agents/skills/` | `.agents/skills/` |
 | Claude Code | `~/.claude/skills/` | `.claude/skills/` |
 
-在目标工作区调用 `project-onboard`，例如：
+在目标工作区调用 `relay-onboard`，例如：
 
-- “用 project-onboard 在当前空目录创建一个 Spring 后端，使用 Maven。”
-- “用 project-onboard 创建一个 Spring 后端，参考旁边的订单项目的模块组织和测试写法。”
-- “用 project-onboard 接入这个现有 Spring 项目，先探查并给我接入草案。”
+- “用 relay-onboard 在当前空目录创建一个 Spring 后端，使用 Maven。”
+- “用 relay-onboard 创建一个 Spring 后端，参考旁边的订单项目的模块组织和测试写法。”
+- “用 relay-onboard 接入这个现有 Spring 项目，先探查并给我接入草案。”
 
 ## 两条路径
 
 - **创建 Spring 项目**：确定技术选择，按需借鉴用户提供的参考项目，生成构建配置、应用入口和基础测试，按团队确认的入口验证，例如仓库的 Gradle Wrapper 或团队统一安装的 Maven。
-- **接入已有项目**：根据构建清单、锁文件和 CI 确认工程边界，沿目标模块的一条真实链路核对行为和验证。把日常使用的结论写入既有开发文档，简单项目可直接写进根 `AGENTS.md`。只有冲突、未决事项或分批接入需要持续跟踪时，才长期保留接入摘要。见 [接入探查与交付](skills/project-onboard/references/onboarding.md)。
+- **接入已有项目**：根据构建清单、锁文件和 CI 确认工程边界，沿目标模块的一条真实链路核对行为和验证。把日常使用的结论写入既有开发文档，简单项目可直接写进根 `AGENTS.md`。只有冲突、未决事项或分批接入需要持续跟踪时，才长期保留接入摘要。见 [接入探查与交付](skills/relay-onboard/references/onboarding.md)。
 
-首版规范区分已有约束、观察到的习惯和建议的默认做法。影响设计方向的缺口先讨论，局部可逆的建议可随首个需求设计一起审查。已有适用的规范或技术决定就直接引用。见[第一版规范的形成与修订](skills/project-onboard/references/base-standards.md#第一版规范的形成与修订)。
+首版规范区分已有约束、观察到的习惯和建议的默认做法。影响设计方向的缺口先讨论，局部可逆的建议可随首个需求设计一起审查。已有适用的规范或技术决定就直接引用。见[第一版规范的形成与修订](skills/relay-onboard/references/base-standards.md#第一版规范的形成与修订)。
 
 基础开发规范和 Java / Spring、Python、Node 的探查参考随接入 Skill 分发。接入方案见 [设计说明](DESIGN.md)。
 
@@ -50,9 +54,9 @@ python <上游副本>/skills/project-onboard/scripts/workflow_update.py --doctor
 
 ## 从需求到实现
 
-启用 [change-design](skills/change-design/) 后，在目标项目里直接描述需求，例如「给看板增加按部门筛选和导出，先出设计」。
+启用 [relay-change](skills/relay-change/) 后，在目标项目里直接描述需求，例如「给看板增加按部门筛选和导出，先出设计」。
 
-需要独立设计时，AI 从 `AGENTS.md` 进入，核对现有行为、调用入口和项目规范，再用 [设计模板](skills/change-design/assets/design.md) 创建或更新设计。默认位置为 `docs/design/Req-YYYYMMDD-需求名称/design.md`。设计记录业务规则、验收、技术方案和评审决定，按需补充 [技术章节](skills/change-design/references/design-sections.md)。前后端或多个仓库共同交付同一能力时，共用主设计和验收编号，各模块沿用自己的验证命令。
+需要独立设计时，AI 从 `AGENTS.md` 进入，核对现有行为、调用入口和项目规范，再用 [设计模板](skills/relay-change/assets/design.md) 创建或更新设计。默认位置为 `docs/design/Req-YYYYMMDD-需求名称/design.md`。设计记录业务规则、验收、技术方案和评审决定，按需补充 [技术章节](skills/relay-change/references/design-sections.md)。前后端或多个仓库共同交付同一能力时，共用主设计和验收编号，各模块沿用自己的验证命令。
 
 设计先写清能区分不同方案的实例，再按契约、流程、数据和发布风险展开。编码时从改动模块找到有效配置、团队约定和参考实现。验收时分别核对业务行为与代码约束，结果写回原任务或 PR。
 
@@ -60,38 +64,77 @@ python <上游副本>/skills/project-onboard/scripts/workflow_update.py --doctor
 
 当前行为不清时先探查或复现，关键技术假设不明时先做有边界的实验，核实事实后，按已确认的设计实现。新证据可使方案返回调查或调整；已有能力能解决问题时优先说明复用方式。重要决定保留依据、适用条件和重新评估条件，普通细节不增加记录。功能验收通过与实际收益已验证分别说明。
 
-两个 Skill 按职责选择，日常变更不必重复接入项目。设计时读取技术章节，实施或续做时读取 [小步实施与验收](skills/change-design/references/implementation.md)，新建或演进需求、维护看板时再读取 [需求演进与索引](skills/change-design/references/requirement-lifecycle.md)。每个实施增量按“选择结果 → 确定验证方法 → 实现 → 验证 → 记录证据 → 下一项”推进，在已有授权内连续工作。实际结果附环境及对应版本或工作区范围，命令和 PR 链接本身不代表通过；局部验证后仍按影响补充整体验收。
+两个 Skill 按职责选择，日常变更不必重复接入项目。设计时读取技术章节，实施或续做时读取 [小步实施与验收](skills/relay-change/references/implementation.md)，新建或演进需求、维护看板时再读取 [需求演进与索引](skills/relay-change/references/requirement-lifecycle.md)。每个实施增量按“选择结果 → 确定验证方法 → 实现 → 验证 → 记录证据 → 下一项”推进，在已有授权内连续工作。实际结果附环境及对应版本或工作区范围，命令和 PR 链接本身不代表通过；局部验证后仍按影响补充整体验收。
 
 评审时可以直接说「把导出范围改成当前筛选结果」，AI 更新原设计并指出受影响的验收项。决定实施时说「按这份设计实现」。换会话时从已有设计、任务和验证证据恢复。跨工作区交接附接手者可访问的分支、提交或 PR，注明最后验证和下一步。
 
-一份设计默认用小节组织。有多个实施增量时拆任务。局部契约或取舍需要单独维护时，把细节移到专题页，从原 `design.md` 链接。专题共用一份验收与任务记录。能够独立交付和维护的业务能力可拆为关联需求。并行变更合并前核对预期、任务引用、编号和生效条件。见 [需求演进与索引](skills/change-design/references/requirement-lifecycle.md)。
+一份设计默认用小节组织。有多个实施增量时拆任务。局部契约或取舍需要单独维护时，把细节移到专题页，从原 `design.md` 链接。专题共用一份验收与任务记录。能够独立交付和维护的业务能力可拆为关联需求。并行变更合并前核对预期、任务引用、编号和生效条件。见 [需求演进与索引](skills/relay-change/references/requirement-lifecycle.md)。
 
-每个需求目录配一份 [任务看板](skills/change-design/assets/tasks.md)，按增量记录本次计划、实际改动和证据。总看板显示当前任务、已完成增量、需求关系和阻塞原因。隔离测试与正式数据验收可以单独交付时，分别记录进度。
+每个需求目录配一份 [任务看板](skills/relay-change/assets/tasks.md)，按增量记录本次计划、实际改动和证据。总看板显示当前任务、已完成增量、需求关系和阻塞原因。隔离测试与正式数据验收可以单独交付时，分别记录进度。
 
-采用本模板的项目可用 [看板工具](skills/change-design/scripts/requirements.py) 刷新或检查 `docs/design/README.md`。例如把 Skill 放进目标仓库的 `.agents/skills/` 后，从目标仓库根目录执行以下命令。辅助脚本使用 Python 3.9 或更新版本。
+采用本模板的项目可用 [看板工具](skills/relay-change/scripts/requirements.py) 刷新或检查 `docs/design/README.md`。例如把 Skill 放进目标仓库的 `.agents/skills/` 后，从目标仓库根目录执行以下命令。辅助脚本使用 Python 3.9 或更新版本。
 
 ```sh
-python .agents/skills/change-design/scripts/requirements.py --write
-python .agents/skills/change-design/scripts/requirements.py --check
+python .agents/skills/relay-change/scripts/requirements.py --write
+python .agents/skills/relay-change/scripts/requirements.py --check
 ```
 
-已有手写需求索引时，在希望显示看板的位置选定[自动更新区域](skills/change-design/references/requirement-lifecycle.md#看板与检查)，区域外继续由团队维护。
+已有手写需求索引时，在希望显示看板的位置选定[自动更新区域](skills/relay-change/references/requirement-lifecycle.md#看板与检查)，区域外继续由团队维护。
 
-评审指定需求时，可运行 `python .agents/skills/change-design/scripts/requirements.py --review "Req-YYYYMMDD-需求名称"`。它检查「需求与验收」中的每条编号是否有关联任务或书面验证安排。覆盖缺口只输出提示，验收结果由实际验证和评审确认。
+评审指定需求时，可运行 `python .agents/skills/relay-change/scripts/requirements.py --review "Req-YYYYMMDD-需求名称"`。它检查「需求与验收」中的每条编号是否有关联任务或书面验证安排。覆盖缺口只输出提示，验收结果由实际验证和评审确认。
 
 修改已有需求时，追加 `--base <上次确认的提交>` 可对照工作区，逐条查看增删或改写的预期，以及引用它们的当前任务。例如 AC-1 从「缺月留空」改成「缺月填 0」后，评审者能看到上一轮已完成的 T1，决定需要重跑哪个导出样例。
 
 ## 更新工作流
 
-按 [同步参考](skills/project-onboard/references/workflow-update.md) 在目标项目的 `.ai-workflow.json` 登记上游、启用的 Skill、源提交、文件摘要和验证命令，在 `AGENTS.md` 保留更新入口。以后可说「更新工作流」，让 AI 获取确定版本并使用更新工具预览和应用。出现冲突时保持原状，验证失败时回退，强制中断后可恢复。目标项目继续维护自己的开发规范、构建配置和需求记录。
+按 [同步参考](skills/relay-onboard/references/workflow-update.md) 在目标项目的 `.ai-workflow.json` 登记上游、启用的 Skill、源提交、文件摘要和验证命令，在 `AGENTS.md` 保留更新入口。以后可说「更新工作流」，让 AI 获取确定版本并使用更新工具预览和应用。出现冲突时保持原状，验证失败时回退，强制中断后可恢复。目标项目继续维护自己的开发规范、构建配置和需求记录。
+
+## 团队定制与检查
+
+已登记的 Skill 保持上游原样，团队差异放在更新工具不管理的路径：
+
+| 类型 | 默认位置 | 用途 |
+|---|---|---|
+| 覆盖层 | `.ai-workflow/overlays/<名称>.md` | 替换或补充团队规则；模板见 [overlay.md](skills/relay-onboard/assets/overlay.md) |
+| 预设 | `.ai-workflow/presets/<名称>.json` | 保存技术栈、JDK、构建命令等首版选择；示例见 [presets](skills/relay-onboard/assets/presets/) |
+| 扩展 | `.ai-workflow/extensions/<名称>/` | 新增不 fork 核心的能力或参考 |
+
+根入口说明“先读上游 Skill，再读覆盖层”；覆盖层与上游冲突时停下确认。覆盖层开头声明目标技能和被覆盖的小节，登记后由 `--doctor` 核对：
+
+```sh
+python .agents/skills/relay-onboard/scripts/workflow_update.py --register-layer overlay .ai-workflow/overlays/relay-change.md
+python .agents/skills/relay-onboard/scripts/workflow_update.py --register-layer preset .ai-workflow/presets/java-spring-team.json
+python .agents/skills/relay-onboard/scripts/workflow_update.py --doctor
+```
+
+目标技能不存在、被覆盖的文件或小节已改名、预设结构不完整、扩展缺少 `SKILL.md` 时，`--doctor` 报错而不是静默通过。它不判断覆盖层规则本身写得好不好，也不执行其中的命令。更新前先运行，更新后对报错项人工迁移。
+
+采用需求看板的项目可以把只读检查挂到 PR：
+
+```sh
+python .agents/skills/relay-change/scripts/ci_gate.py --base "$BASE_SHA"
+```
+
+它检查看板时效、任务编号和本次改动需求的验收安排；不运行业务测试，也不证明验收结果已通过。工作流模板见 [design-check.yml](skills/relay-change/assets/design-check.yml)，说明见[需求演进与索引](skills/relay-change/references/requirement-lifecycle.md#ci-里的只读检查)。建议先以非阻断方式运行，再设为 required check。
+
+检查 Skill 自身体积、引用扇出和触发选择：
+
+```sh
+python skills/relay-onboard/scripts/skill_audit.py --skills skills
+python skills/relay-onboard/scripts/trigger_eval.py --cases evals/trigger_cases.jsonl --predict-command "<本机路由命令> {utterance}" --output <预测.jsonl>
+```
+
+前者统计入口 token、可达引用、孤儿文件和 front matter 警告，用于比较版本和控制上下文成本；token 数为估算，不用作计费。后者对每条请求运行本机路由命令，或用 `--predictions` 读取轨迹导出的结果，再计算精确率、召回率和误判。先固定用例、runner 和模型再改描述。目标技术栈的覆盖范围见[接入参考](skills/relay-onboard/references/README.md)，没有参考时按[未知技术栈](skills/relay-onboard/references/onboarding.md#未知技术栈)探查。
 
 ## 验证接入包
 
 AI 任务效果使用 [真实任务评测](evals/README.md)，提供 Python CLI、续做、Maven/Spring、Gradle＋Node 的隔离场景和外部验收，可比较原有项目指令、当前版和候选版。脚本测试通过与 AI 任务效果分别记录。
 
+“决定在交接中不被改反、历史不被重写”用独立的[决定接力试验](evals/decision_relay/README.md)检查：固定 A 状态，B 做局部舍入改动，C 改回并保留历史；先校准评分器，再运行模型。
+
 设计深度、图示选择与续做行为另用 [设计工作流评审场景](evals/design-review.md) 检查，评审实际产物和过程，不用标题或图的数量代替质量。
 
-在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、编号与引用校验、Markdown 格式容忍、验收安排提示，以及 Maven 参数和 JDK 环境的传递。更新工具使用隔离 Git 仓库验证预览、定制保留、冲突、回退和中断恢复。运行测试需要 Python 和 Git，无需访问网络。
+在本仓库根目录运行 `python -B -m unittest discover -s tests`。测试覆盖看板生成、编号与引用校验、Markdown 格式容忍、验收安排提示，以及 Maven 参数和 JDK 环境的传递。更新工具使用隔离 Git 仓库验证预览、定制保留、冲突、回退、中断恢复、旧名迁移、图层登记与上游小节漂移。决定接力和触发评测分别用校准实现和脚本化 runner 验证评分器本身。运行测试需要 Python 和 Git，无需访问网络。
 
 ## 当前证据状态
 

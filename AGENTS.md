@@ -1,6 +1,6 @@
 # AI 工作流开发入口
 
-本仓库是这套 AI 协作工作流的**源仓库**，不是业务应用：产出是两个可安装到目标项目的 Skill（[project-onboard](skills/project-onboard/SKILL.md)、[change-design](skills/change-design/SKILL.md)），以及验证它们的评测设施。在目标项目里怎么用见 [README 的使用一节](README.md)；为什么这样设计见 [DESIGN](DESIGN.md)。
+本仓库是这套 AI 协作工作流的**源仓库**，不是业务应用：产出是两个可安装到目标项目的 Skill（[relay-onboard](skills/relay-onboard/SKILL.md)、[relay-change](skills/relay-change/SKILL.md)），以及验证它们的评测设施。两个 Skill 合称 Relay（接力）。在目标项目里怎么用见 [README 的使用一节](README.md)；为什么这样设计见 [DESIGN](DESIGN.md)。
 
 ## 定位
 
@@ -8,12 +8,12 @@
 | --- | --- |
 | Skill 的行为、入口判断 | `skills/<name>/SKILL.md`。按它的「选择入口」只读需要的 references，不要全部加载。 |
 | 探查、规范、图示等参考 | `skills/<name>/references/` |
-| 设计、任务、开发规范模板 | `skills/change-design/assets/{design.md,tasks.md}`、`skills/project-onboard/assets/development.md` |
-| 脚本 | `skills/project-onboard/scripts/{maven_preflight.py,workflow_update.py}`、`skills/change-design/scripts/requirements.py` |
-| 评测场景与评分器 | `evals/{cases.py,grade.py,run.py,cold_handoff.py}`，历史结论与边界在 [evals/VALIDATION.md](evals/VALIDATION.md) |
+| 设计、任务、开发规范模板 | `skills/relay-change/assets/{design.md,tasks.md}`、`skills/relay-onboard/assets/development.md` |
+| 脚本 | `skills/relay-onboard/scripts/{maven_preflight.py,workflow_update.py,skill_audit.py,trigger_eval.py}`、`skills/relay-change/scripts/{requirements.py,ci_gate.py}` |
+| 评测场景与评分器 | `evals/{cases.py,grade.py,run.py,cold_handoff.py}`、`evals/decision_relay/`、`evals/trigger_cases.jsonl`、`evals/baselines/`，历史结论与边界在 [evals/VALIDATION.md](evals/VALIDATION.md) |
 | 接手 11 月的评测工作 | 从 [DeepSeek 接手入口](evals/README.md#deepseek-接手入口) 核对代码版本、已有试验和待验证问题 |
 | 端到端教学样例 | [examples/quarterly-report/](examples/quarterly-report/)（自带 `AGENTS.md`、设计与任务记录） |
-| 回归用例 | `tests/`，4 个文件、53 个用例 |
+| 回归用例 | `tests/`，9 个文件、94 个用例 |
 
 约定少、入口集中，因此不单列 `docs/development.md`：长期约定写在本文件，单次改动写进提交说明或 PR。受跟踪文件只有源码、文档、测试与 CI 配置，没有构建产物。
 
@@ -29,12 +29,13 @@
 
 ## 验证
 
-工作目录为仓库根。运行时 Python 3.9+（本机 3.13.2），Git 必需，不联网。全量回归复核于 2026-11-24。
+工作目录为仓库根。运行时 Python 3.9+（本机 3.13.2），Git 必需，不联网。全量回归复核于 2026-11-26。
 
 | 目的 | 命令 | 实测 |
 | --- | --- | --- |
-| 全量回归 | `python -X utf8 -B -m unittest discover -s tests` | 53 项通过，约 145 s |
+| 全量回归 | `python -X utf8 -B -m unittest discover -s tests` | 94 项通过，约 235 s |
 | 单文件回归 | `python -X utf8 -B -m unittest discover -s tests -p test_requirements.py` | 15 项通过，约 12 s |
+| 决定接力校准 | `python -B evals/decision_relay/relay.py calibrate --trial <新目录>` | 正确实现通过，三个错误变体各自被对应检查拦下，约 7 s |
 | 示例交付物 | 在 `examples/quarterly-report` 下 `python -B -m unittest -v test_export` | 需 openpyxl 3.1.5 |
 
 Windows 控制台是 GBK，不带 `-X utf8` 时脚本的中文帮助与报错会乱码。

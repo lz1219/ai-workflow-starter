@@ -1,48 +1,57 @@
-# AI 项目接入与需求设计
+# Relay：AI 项目接入与需求设计
 
 **状态**　已实现的工作流约定，随代码维护
 
-[project-onboard](skills/project-onboard/SKILL.md) 支持从零创建 Spring 项目，或接入已有的 Java、Python、Node 及混合技术栈项目。[change-design](skills/change-design/SKILL.md) 按业务能力维护需求、方案和验收。开发规范记录长期约定和模块命令，需求记录本次交付和实际证据。
+两个 Skill 合称 Relay（接力）：[relay-onboard](skills/relay-onboard/SKILL.md) 支持从零创建 Spring 项目，或接入已有的 Java、Python、Node 及混合技术栈项目；[relay-change](skills/relay-change/SKILL.md) 按业务能力维护需求、方案和验收。开发规范记录长期约定和模块命令，需求记录本次交付和实际证据。
 
 ## 1. 交付形式
 
 ### Skills 提供什么
 
 ```text
-project-onboard/
+relay-onboard/
   SKILL.md                   接入入口、路径选择、草案与交付要求
   references/
+    README.md                覆盖范围、未知技术栈入口与补充方式
+    _template.md             新增技术栈参考的模板
     base-standards.md        基础开发规范
     onboarding.md            现有项目探查与交付
     java-spring.md           Java / Spring 探查要点、开发参考和验证示例
     python.md                Python 依赖、运行和测试入口
     node.md                  Node 和前端工作区、脚本和联调
-    workflow-update.md       项目内 Skill 的同步约定
+    workflow-update.md       项目内 Skill 的同步、覆盖层与扩展约定
   assets/
     development.md          项目开发规范模板
+    onboarding-report.md    首次接入的单页交付模板
+    overlay.md              团队覆盖层模板
+    presets/                技术栈与流程预设示例
   scripts/
     maven_preflight.py       核对 Maven 的 JDK，按需执行项目验证
     workflow_update.py       预览、同步登记的 Skill，验证失败时恢复
-change-design/
+    skill_audit.py           统计入口体积、引用扇出与 front matter 健康
+    trigger_eval.py          用标注请求与路由结果计算触发精确率与召回率
+relay-change/
   SKILL.md                   需求、设计、评审、实施与验收
   references/
     design-sections.md       按影响选择技术章节、图示与一致性评审
     implementation.md        可验证增量、续做、阻塞与验收证据
-    requirement-lifecycle.md 稳定目录、需求演进、关系与看板命令
+    requirement-lifecycle.md 稳定目录、需求演进、关系、看板与 CI 检查
   assets/
     design.md               需求与技术设计模板
     tasks.md                任务看板模板
+    design-check.yml        目标项目的只读需求检查工作流模板
   scripts/
     requirements.py          检查需求与任务并生成总看板
+    ci_gate.py               在 CI 中检查看板、编号与验收安排
 ```
 
 在个人工具中配置一次，或按项目安装后，在目标工作区按需调用。Codex 和 Claude Code 使用各自的技能目录，维护同一份 Skill 源文件。用户可明确指定 Skill，也可用自然语言表达匹配的需求；普通开发沿用仓库约定，不必重复接入项目。 [Codex Skills](https://learn.chatgpt.com/docs/build-skills#where-codex-loads-local-skills) · [Claude Code Skills](https://code.claude.com/docs/en/skills)
 
 | 调用示例 | 选择的路径 | 第一次输出 |
 |---|---|---|
-| “用 project-onboard 从零创建一个 Spring 后端” | 创建项目 | 目标目录、初始技术选择、拟生成的文件、首个验证目标 |
+| “用 relay-onboard 从零创建一个 Spring 后端” | 创建项目 | 目标目录、初始技术选择、拟生成的文件、首个验证目标 |
 | “从零创建一个 Spring 后端，参考现有订单项目” | 创建项目 | 另附参考来源、拟沿用的做法和目标项目需要调整的地方 |
-| “用 project-onboard 接入这个 Spring 项目” | 接入已有项目 | 探查范围、证据和命令结果、拟复用或更新的文档、待确认项 |
+| “用 relay-onboard 接入这个 Spring 项目” | 接入已有项目 | 探查范围、证据和命令结果、拟复用或更新的文档、待确认项 |
 
 先识别目标目录及其内容。已有业务代码或构建文件时走存量接入。用户要创建项目但目标目录已有工程时，列出冲突并确认目标。接入过程按「探查或收集目标 → 给出草案 → 按已确认范围落地 → 验证」进行。缺少明文开发规范时，在实施前请人确认首版项目级约定及必要的模块差异。局部可逆的建议可随设计一次审查。重复调用先识别已有产物，只提出必要的更新。
 
@@ -121,7 +130,7 @@ change-design/
 
 ## 4. 需求设计与日常开发
 
-对明确的新功能需求，可使用 [change-design](skills/change-design/SKILL.md) 记录业务规则、验收和关键决定。按调用入口选用界面、HTTP、CLI、公共库、任务或数据章节。默认位置是 `docs/design/Req-YYYYMMDD-需求名称/design.md`，日期取首次创建设计的本地日期。评审决定写回设计，实际结果由任务或 PR 提供证据。
+对明确的新功能需求，可使用 [relay-change](skills/relay-change/SKILL.md) 记录业务规则、验收和关键决定。按调用入口选用界面、HTTP、CLI、公共库、任务或数据章节。默认位置是 `docs/design/Req-YYYYMMDD-需求名称/design.md`，日期取首次创建设计的本地日期。评审决定写回设计，实际结果由任务或 PR 提供证据。
 
 ### 设计深度与按需读取
 
@@ -193,7 +202,14 @@ Skill 描述用于选择入口，正文保留范围判断、授权边界、当�
 ## 6. 分发、兼容与扩展
 
 - **分发**：以 Skill 文件夹为主。更新工具的 `--install` 可从确定提交安装、登记版本并补充项目入口，`--doctor` 离线检查接入状态。项目开发规范仍依据实际探查维护。
-- **按需更新**：项目在 `.ai-workflow.json` 登记上游、启用目录、源提交、文件摘要和验证命令，`AGENTS.md` 保留调用入口。收到「更新工作流」时使用更新工具预览，有冲突则整次停止。无冲突时同步已登记的 Skill，验证通过后记录版本，失败时恢复本次修改。中断后通过恢复记录回退。操作说明见 [同步参考](skills/project-onboard/references/workflow-update.md)。项目开发规范和需求记录由项目维护者管理。
+- **按需更新**：项目在 `.ai-workflow.json` 登记上游、启用目录、源提交、文件摘要和验证命令，`AGENTS.md` 保留调用入口。收到「更新工作流」时使用更新工具预览，有冲突则整次停止。无冲突时同步已登记的 Skill，验证通过后记录版本，失败时恢复本次修改。中断后通过恢复记录回退。操作说明见 [同步参考](skills/relay-onboard/references/workflow-update.md)。项目开发规范和需求记录由项目维护者管理。
+- **团队定制**：已登记 Skill 保持上游原样。覆盖层放 `.ai-workflow/overlays/`，预设放 `.ai-workflow/presets/`，扩展放 `.ai-workflow/extensions/`；这些路径不进入安装清单，更新时保留。根入口说明读取顺序，覆盖层与上游语义冲突时停止确认。用 `--register-layer` 登记后，`--doctor` 核对目标技能、被覆盖文件与标题、预设结构和扩展入口；上游改名导致标题消失时要求人工迁移，不静默失效。
+- **改名迁移**：`relay-onboard` / `relay-change` 是当前名称；旧名 `project-onboard` / `change-design` 的清单仍可读取，但更新会停止并提示先按新名安装、再 `--remove` 旧目录。移除要求文件未被本地修改，团队规则先迁入覆盖层。历史评测记录保留旧名，不改写。
+- **覆盖面**：有参考的技术栈写明适用边界和证据；没有参考时按未知技术栈协议探查，不套用其他栈的结论。参考模板和覆盖表随 Skill 分发，团队可补充并经真实项目验证后提交。
+- **只读检查**：看板项目可把 `ci_gate.py` 挂到 PR，检查看板时效、编号结构和本次改动需求的验收安排。它是结构门禁，不运行业务测试，也不证明验收结果已通过；先非阻断运行，再按团队情况设为 required check。
+- **体积审计**：`skill_audit.py` 统计入口 token、可达引用、孤儿文件和 front matter 警告，用于比较版本和控制上下文成本。token 为估算值，不作为计费依据。
+- **触发评测**：`trigger_eval.py` 用标注请求和路由预测计算各技能的精确率、召回率与误判。同一批用例比较 `description` 改动，预测取自实际轨迹；没有预测数据时只检查用例本身，不给出通过结论。
+- **决定接力**：`evals/decision_relay/` 用固定 A 状态、B 局部改动、C 改回的三阶段合成任务，检查决定不被改反、范围不扩权、历史只追加。`calibrate` 先证明评分器能区分正确与错误实现，再花模型运行。它支持“交接可审计”的主张，不证明工作流整体质量更优。
 
 ## 7. 接入包自身的验收
 
@@ -209,6 +225,9 @@ Skill 描述用于选择入口，正文保留范围判断、授权边界、当�
 | 混合技术栈与非 Web | 新会话能通过项目入口找到需求、实现和各模块命令，验证同仓的 Gradle + Node 联调和 Python CLI 的可观察行为。 |
 | 验收检查 | 正式编号与任务、验证表引用一致，重复和未知编号报告错误，代码示例不参与定义，表格空格调整不影响结果。安排覆盖与实际验收结果分开报告。 |
 | 工作流更新 | 预览不写文件，定制与项目文档保留，冲突时无部分更新，验证或写入失败恢复旧内容和版本，中断后可恢复并保护后续编辑。 |
+| 团队图层 | 覆盖层、预设、扩展登记后，目标技能缺失、被覆盖文件或小节被上游改名、预设结构不完整、扩展入口不合法时 `--doctor` 报告错误；更新保留图层文件。 |
+| 旧名迁移 | 旧清单可读但更新被拒绝；按新名安装后可 `--remove` 未修改的旧目录，本地修改必须先迁入覆盖层，项目文档不被删除。 |
+| 触发与决定保持 | 关键词基线能跑通同一批请求并暴露误判；决定接力的正确实现通过，共享函数被改或历史被重写时对应检查失败。 |
 
 ## 8. 默认约定
 

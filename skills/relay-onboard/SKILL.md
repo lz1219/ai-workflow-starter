@@ -11,8 +11,8 @@ description: Initialize a project, establish or repair project development guida
 
 - **创建项目**：区分目标目录和参考项目。目标目录已有业务工程时核对目标与范围。
 - **接入已有项目**：按 [接入探查与交付](references/onboarding.md) 限定范围并取证，交付探查结论，按已确认的范围更新项目文档。
-- **更新已安装工作流**：按 [同步参考](references/workflow-update.md) 使用登记清单和更新工具，先预览，再在无冲突时同步和验证。
-- **安装或检查工作流**：按 [安装与检查](references/workflow-update.md) 使用 `--install` 一并安装和登记版本，使用 `--doctor` 离线检查接入状态。项目文档仍根据实际探查结果维护。
+- **更新已安装工作流**：按 [同步参考](references/workflow-update.md) 使用登记清单和更新工具，先预览，再在无冲突时同步和验证。团队差异放覆盖层、预设或扩展，不改已登记的 Skill 文件。
+- **安装或检查工作流**：按 [安装与检查](references/workflow-update.md) 使用 `--install` 一并安装和登记版本，使用 `--doctor` 离线检查接入状态。项目文档仍根据实际探查结果维护。安装后可用 `skill_audit.py` 核对入口体积与引用，用 `trigger_eval.py` 核对技能选择。
 - 用户只要求设计或探查时，交付草案或报告。已确认规范和本次设计后，在授权范围内继续实施。只询问会实质影响结果的未决问题。
 
 ## 创建项目
@@ -26,10 +26,10 @@ description: Initialize a project, establish or repair project development guida
 
 ## 接入已有项目
 
-1. 选择接手者将要完成的一件真实工作，例如修改一次导出或给库增加一种输入。从仓库入口追到它的调用方、实现和验证，再确定需要补哪些项目指引。先核对仓库级入口、构建和 CI，再深入目标模块和一条代表性链路。依据需要读取 [Java / Spring](references/java-spring.md)、[Python](references/python.md) 或 [Node / 前端](references/node.md)。
+1. 选择接手者将要完成的一件真实工作，例如修改一次导出或给库增加一种输入。先看[接入参考覆盖范围](references/README.md)，确认目标技术栈是否已有参考；没有参考时按[未知技术栈](references/onboarding.md#未知技术栈)探查。从仓库入口追到它的调用方、实现和验证，再确定需要补哪些项目指引。先核对仓库级入口、构建和 CI，再深入目标模块和一条代表性链路。依据需要读取 [Java / Spring](references/java-spring.md)、[Python](references/python.md) 或 [Node / 前端](references/node.md)。
 2. 执行适用的项目验证，分别报告构建、实际执行的测试、跳过项和未覆盖环境。
 3. 沿写好的项目入口回走这件工作，检查接手者能否定位代码、适用的编码约定和实际验证方法。发现缺口就补在原入口；演练范围与尚未验证的环节随结果交付。
-4. 交付覆盖范围、证据、结果及文档去向。冲突、未决事项或分批接入需要持续跟踪时，用现有记录承载，缺少位置时按需建接入摘要。重复接入针对实际变化和缺口。
+4. 用[接入报告模板](assets/onboarding-report.md)交付结论、证据、待确认项和文档去向，控制在维护者 10 分钟内能读完。冲突、未决事项或分批接入需要持续跟踪时，用现有记录承载，缺少位置时按需建接入摘要。重复接入针对实际变化和缺口；约定先写最小集，其余显式列为待确认。
 
 ## 写入项目和交付
 
