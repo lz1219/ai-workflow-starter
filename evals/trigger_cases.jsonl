@@ -1,0 +1,30 @@
+# 技能触发评测用例。每行一个 JSON 对象；expected 为技能目录名，null 表示不应触发工作流技能。
+# 预测文件用同一批 utterance，写 predicted 字段。格式说明见 skills/relay-onboard/scripts/trigger_eval.py。
+{"utterance": "帮我把这个仓库接入一下，整理出开发规范和验证命令。", "expected": "relay-onboard"}
+{"utterance": "从零开始建一个 Spring Boot 项目，JDK 17，用 Maven Wrapper。", "expected": "relay-onboard"}
+{"utterance": "给这个项目安装 AI 工作流，并登记版本。", "expected": "relay-onboard"}
+{"utterance": "把项目里的工作流更新到最新提交，冲突就停下来。", "expected": "relay-onboard"}
+{"utterance": "检查工作流安装状态，看看有没有文件被改过或者缺失。", "expected": "relay-onboard"}
+{"utterance": "这个项目没有 AGENTS.md，帮我根据现有构建和测试补一份入口。", "expected": "relay-onboard"}
+{"utterance": "这是个 Node monorepo，帮我梳理各个包的构建和测试入口。", "expected": "relay-onboard"}
+{"utterance": "我们用的是内部框架，仓库里没有现成参考，帮我摸清楚怎么跑测试。", "expected": "relay-onboard"}
+{"utterance": "把团队的额外约定放到覆盖层，不要改上游 Skill 文件。", "expected": "relay-onboard"}
+{"utterance": "开发规范里有一条已经过期了，帮我重新核对命令和证据。", "expected": "relay-onboard"}
+{"utterance": "我要给导出功能加按月份筛选，先跟我把需求谈清楚再出设计。", "expected": "relay-change"}
+{"utterance": "评审一下这份设计，看验收项和任务有没有漏。", "expected": "relay-change"}
+{"utterance": "这个需求拆成哪些可验证的任务？顺便更新任务看板。", "expected": "relay-change"}
+{"utterance": "实现任务 T2，补上对应的验收证据。", "expected": "relay-change"}
+{"utterance": "看板提示过期了，按现有模板重新生成一下。", "expected": "relay-change"}
+{"utterance": "AC-3 没有关联任务也没有验证安排，帮我补上。", "expected": "relay-change"}
+{"utterance": "把这次改动按现有模板记到 docs/design 下。", "expected": "relay-change"}
+{"utterance": "上一版设计里 AC-2 的预期被改了，核对一下原证据还适不适用。", "expected": "relay-change"}
+{"utterance": "给这个 PR 加上需求结构和验收覆盖的 CI 检查。", "expected": "relay-change"}
+{"utterance": "这个需求和另一个需求有依赖，帮我在 design.md 里建立关系。", "expected": "relay-change"}
+{"utterance": "解释一下这段 Java 代码在做什么。", "expected": null}
+{"utterance": "把这份 PDF 转成 Word 文档。", "expected": null}
+{"utterance": "帮我写一个匹配邮箱地址的正则。", "expected": null}
+{"utterance": "这个 Excel 里第二季度的销售额求和是多少？", "expected": null}
+{"utterance": "部署到测试环境并重启服务。", "expected": null}
+{"utterance": "这个报错的堆栈是什么意思？", "expected": null}
+{"utterance": "用 matplotlib 画一张过去 12 个月的销售趋势图。", "expected": null}
+{"utterance": "把 README 里的英文段落翻译成中文。", "expected": null}
