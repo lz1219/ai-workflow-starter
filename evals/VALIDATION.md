@@ -364,3 +364,17 @@ fixture 摘要 `4c9fbbd2`、prompt 摘要 `c1dfc913`，六份一致。项目自�
 同一 MXC runner 下，baseline 3/3、candidate 3/3 全部通过，每份都只修改了 `handoff.json`。六份报告的 fixture 摘要均为 `b2a31a7d6cde`，提示摘要均为 `5206531bdf60`，候选 Skill 摘要为 `1be1eec33d07`。评分器能检出历史错误，当前基线在合成任务上没有重现它，因此本轮保留现有 Skill。合成输入直接给出了逐月状态，实际工作簿回写的出错率仍待验证。
 
 本机原始 trial 保存在系统临时目录下的 `workflow-drift-2255f27e0b5a4edba1f47a13cf50d03d`。其中 `drift-report.json` 包含首次受阻和修复后的两对试验，`stage-a-audit.json` 记录对 A 快照的独立复查，`quarter-report.json` 汇总月份回写的六次运行。十个成功会话的 ID 各异，均保留原始轨迹与最终答复。运行期间出现 WebSocket 超时并自动回落 HTTPS，本轮不比较用时。
+
+## 2026-11-26 · 旧版安装升级到 Relay 新名
+
+这次不是模拟改写清单，而是先用旧版工具安装旧 Skill，再用当前版工具完成迁移。两个上游都从本仓库的确定提交导出：旧版为 `8639545`（`project-onboard` / `change-design`），当前版为 `cde8abb`（`relay-onboard` / `relay-change`）。目标项目是在系统临时目录中创建的空白 Git 工作区，只有一份团队 `AGENTS.md` 和一个带标记区的需求看板。
+
+实际顺序和结果：
+
+1. 用旧版 `workflow_update.py --install project-onboard change-design` 安装 17 个 Skill 文件并登记版本；旧版 `--doctor` 健康，两个 Skill 均无缺失或修改。
+2. 用当前版工具对旧清单执行 `--apply`，退出 1，返回 `Legacy skill names need migration`，未改写文件。
+3. 用当前版工具安装 `relay-onboard relay-change`，新旧四个 Skill 暂时并存；`--doctor` 健康，并分别报告两个旧名警告。
+4. 登记一个覆盖 `relay-change` 的团队图层后，尝试 `--remove relay-change`，退出 1，提示先解除图层；解除登记后，`--remove project-onboard change-design` 成功。
+5. 最终 `--doctor` 只保留两个当前 Skill，没有旧名警告；两条迁移后的清单检查均实际执行并退出 0。旧目录、旧清单项和指向旧路径的检查都已消失，项目 `AGENTS.md` 与覆盖层文件保持不变。
+
+结论：在这条空白项目路径上，旧安装可以按文档顺序升级到新名，旧清单不会被新 front matter 覆盖，迁移检查也会切到新目录。限制是本次没有测试旧 Skill 文件被团队直接修改的情况；按 `--remove` 的约定，这类目录会先被拒绝，团队改动需要迁入覆盖层后再移除。迁移步骤仍由维护者执行，工具不负责改写旧目录中的团队内容或项目文档里的旧路径。
