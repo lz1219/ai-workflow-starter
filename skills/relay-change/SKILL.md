@@ -41,4 +41,6 @@ description: Turn informal feature requests and changes of direction into agreed
 
 任务完成需要对应范围的实际结果。仅有命令、PR 链接或文字声明不足以证明通过。区分已安排、通过、失败和等待条件；局部测试不能替代跨模块验收。交付前核对当前改动上的证据，代码或契约变化后重新判断历史结果是否适用。
 
+采用本模板且启用看板的项目，可把结构检查挂到 PR：`scripts/ci_gate.py` 只读运行看板时效、编号和验收安排检查。它不替代行为验证，CI 通过不等于验收通过。配置见[需求演进与索引](references/requirement-lifecycle.md#ci-里的只读检查)。
+
 采用本模板时，按 [需求演进与索引](references/requirement-lifecycle.md) 刷新或检查看板。`--review` 检查验收安排覆盖。重新评审已确认的设计时，可加 `--base <上次确认的提交>` 查看验收条目变化及关联任务，再判断哪些结果需要复验。发布时把长期有效的行为和契约同步到项目已有规格或 API 定义。

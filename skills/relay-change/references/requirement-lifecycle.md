@@ -51,6 +51,18 @@ python .agents/skills/relay-change/scripts/requirements.py --review "Req-YYYYMMD
 ```
 
 `--write` 刷新 `docs/design/README.md`，汇总任务、已完成增量、关系和阻塞信息。`--check` 检查任务、编号、关系与看板时效。`--review` 检查主设计中的验收项是否有关联任务或书面验证安排。专题链接、细节和一致性由评审核对，实际验证另行执行。
+### CI 里的只读检查
+
+采用本模板的团队可把同一组检查挂到 PR 上。复制[检查模板](../assets/design-check.yml)到目标项目 `.github/workflows/design-check.yml`，按项目调整路径，再由 `ci_gate.py` 只读运行：
+
+```sh
+python .agents/skills/relay-change/scripts/ci_gate.py --base "$BASE_SHA"
+```
+
+它检查看板时效、任务与编号结构，以及本次改动需求的验收安排；没有关联任务或书面验证安排的 `AC-*` 会让 PR 失败。它不运行业务测试，不判断设计质量，也不证明验收结果已经通过。
+
+先以非阻断方式运行一两周，确认误报可接受后再设为 required check。CI 通过只能说明记录结构完整，行为验证仍由项目测试、人工评审和实际观察负责。
+
 
 初次生成时，脚本自动标出看板区域。已有手写索引时，在希望插入看板的位置加入下面两行 HTML 注释，放在代码块外。刷新只更新两行之间的内容，发布说明、Issue 链接和其他团队记录放在区域外。
 

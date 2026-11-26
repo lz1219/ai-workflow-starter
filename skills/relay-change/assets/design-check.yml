@@ -1,0 +1,38 @@
+# 目标项目模板：需求检查（CI gate）
+#
+# 复制到目标项目的 .github/workflows/design-check.yml，并按项目调整 paths
+# 和脚本路径。它只检查需求结构、看板时效与验收安排，不运行业务测试，
+# 也不证明验收结果已经通过。
+#
+# 建议先以非阻断方式运行一两周，确认误报可接受后，再在分支保护中设为
+# required check。CI 通过不等于验收通过；行为验证仍由项目测试和评审负责。
+
+name: design-check
+
+on:
+  pull_request:
+    paths:
+      - "docs/design/**"
+      - "src/**"
+      - "tests/**"
+
+permissions:
+  contents: read
+
+jobs:
+  requirements:
+    name: Requirement structure and coverage
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: "3.12"
+      - name: Check requirements
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: python .agents/skills/relay-change/scripts/ci_gate.py --base "$BASE_SHA"
