@@ -1,0 +1,28 @@
+{
+  "name": "java-spring-team",
+  "description": "Java 17 / Spring Boot 团队基线，优先使用仓库自带的 Maven Wrapper。",
+  "stack": "java-spring",
+  "runtime": {
+    "java": "17"
+  },
+  "build": {
+    "tool": "maven",
+    "wrapper": true,
+    "working_directory": ".",
+    "commands": {
+      "test": "mvnw.cmd -B -ntp test",
+      "verify": "mvnw.cmd -B -ntp verify"
+    }
+  },
+  "conventions": {
+    "language": "zh",
+    "strictness": "team",
+    "design_dir": "docs/design",
+    "require_database_decision": true
+  },
+  "questions": [
+    "首个场景是否需要数据库或外部服务？",
+    "是否沿用公司 BOM 或父 POM？",
+    "CI 是否显式跳过测试？"
+  ]
+}
