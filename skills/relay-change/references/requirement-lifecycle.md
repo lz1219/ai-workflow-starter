@@ -45,9 +45,9 @@
 已用 Issue 看板的项目沿用原来源，仓库索引保留链接。采用本模板且将 Skill 存于 `.agents/skills/` 时，在项目根目录执行：
 
 ```sh
-python .agents/skills/change-design/scripts/requirements.py --write
-python .agents/skills/change-design/scripts/requirements.py --check
-python .agents/skills/change-design/scripts/requirements.py --review "Req-YYYYMMDD-需求名称"
+python .agents/skills/relay-change/scripts/requirements.py --write
+python .agents/skills/relay-change/scripts/requirements.py --check
+python .agents/skills/relay-change/scripts/requirements.py --review "Req-YYYYMMDD-需求名称"
 ```
 
 `--write` 刷新 `docs/design/README.md`，汇总任务、已完成增量、关系和阻塞信息。`--check` 检查任务、编号、关系与看板时效。`--review` 检查主设计中的验收项是否有关联任务或书面验证安排。专题链接、细节和一致性由评审核对，实际验证另行执行。

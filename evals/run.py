@@ -59,8 +59,8 @@ def prepare(args):
         workflow_id = fingerprint(skill_files)
         for name, data in skill_files.items():
             files[".agents/" + name] = data
-        files["AGENTS.md"] += ("\nAI 工作流按需使用：接入或探查见 .agents/skills/project-onboard/SKILL.md；"
-                               "需求、设计、实施与验收约定见 .agents/skills/change-design/SKILL.md。\n")
+        files["AGENTS.md"] += ("\nAI 工作流按需使用：接入或探查见 .agents/skills/relay-onboard/SKILL.md；"
+                               "需求、设计、实施与验收约定见 .agents/skills/relay-change/SKILL.md。\n")
     workspace = trial / "workspace"
     workspace.mkdir(parents=True)
     for name, data in files.items():

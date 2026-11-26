@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 
 
-SCRIPT = Path(__file__).resolve().parents[1] / "skills/project-onboard/scripts/maven_preflight.py"
+SCRIPT = Path(__file__).resolve().parents[1] / "skills/relay-onboard/scripts/maven_preflight.py"
 spec = importlib.util.spec_from_file_location("maven_preflight", SCRIPT)
 preflight = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(preflight)

@@ -1,9 +1,9 @@
 ---
-name: project-onboard
+name: relay-onboard
 description: Initialize a project, establish or repair project development guidance from actual repository evidence, or install, diagnose, and update workflow skills. Use for project initialization, onboarding existing Java, Python, Node, or mixed repositories, maintaining AGENTS.md and development guidance, and workflow installation or maintenance.
 ---
 
-# 项目接入
+# Relay 接入与工作流维护
 
 新建和接入项目都以项目级开发约定为基础，按需补充模块差异。已有适用规范就沿用；缺少明文规范时根据项目起草，由人确认首版后再开发。探查或维护开发规范时参照 [基础开发规范](references/base-standards.md)；仅安装、检查或更新工作流时读取同步参考即可。
 

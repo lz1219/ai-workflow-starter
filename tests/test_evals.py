@@ -318,7 +318,7 @@ print(response)
         self.assertIsNone(left["workflow"])
         self.assertTrue(right["workflow"])
         self.assertFalse((baseline / "workspace/.agents").exists())
-        self.assertTrue((candidate / "workspace/.agents/skills/change-design/SKILL.md").is_file())
+        self.assertTrue((candidate / "workspace/.agents/skills/relay-change/SKILL.md").is_file())
         self.assertNotEqual(self.call("prepare", "--case", "python-cli", "--variant", "baseline", "--trial", baseline).returncode, 0)
 
     def test_runner_failure_is_recorded_separately_from_acceptance(self):

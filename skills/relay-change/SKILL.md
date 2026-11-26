@@ -1,9 +1,9 @@
 ---
-name: change-design
+name: relay-change
 description: Turn informal feature requests and changes of direction into agreed behavior, design decisions, and verifiable implementation. Use when clarifying a requirement with its owner, comparing options, reviewing or revising a design, implementing agreed work, resuming a task, or verifying delivery.
 ---
 
-# 需求设计与增量交付
+# Relay 需求设计与增量交付
 
 先查项目级开发规范、目标模块差异及适用的重大技术决策，再对照本次目标和相关需求设计。缺少明文规范时，可从 README、构建、CI 和代表性实现起草首版，请人确认后再开发。已有规范直接沿用。只要求讨论时交付判断与建议。
 
